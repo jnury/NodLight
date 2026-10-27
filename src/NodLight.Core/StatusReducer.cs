@@ -7,10 +7,6 @@ public static class StatusReducer
     {
         if (e.EventName == "SessionEnd") return null;
 
-        // A different session id in the same window means a new session: start fresh.
-        if (current is { SessionId: not null } && e.SessionId is not null && current.SessionId != e.SessionId)
-            current = null;
-
         (SessionStatus Status, WaitKind Wait, string? Detail)? target = e.EventName switch
         {
             "SessionStart" => (SessionStatus.Idle, WaitKind.None, null),
@@ -22,6 +18,11 @@ public static class StatusReducer
         };
 
         if (target is null) return current;
+
+        // A different session id in the same window means a new session: start fresh.
+        // Only applies when the event actually produces a card; no-change events keep the original.
+        if (current is { SessionId: not null } && e.SessionId is not null && current.SessionId != e.SessionId)
+            current = null;
 
         var (status, wait, detail) = target.Value;
         var card = current ?? new Card(hwnd, e.Agent, null, null, null, status, wait, detail, e.At);

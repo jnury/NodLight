@@ -92,7 +92,21 @@ public class StatusReducerTests
     public void Interrupt_sets_idle()
     {
         var c = StatusReducer.OnInterrupt(CardOf(SessionStatus.Working, detail: "Bash"), t0.AddSeconds(5));
-        Assert.Equal((SessionStatus.Idle, (string?)null), (c.Status, c.Detail));
+        Assert.Equal((SessionStatus.Idle, WaitKind.None, (string?)null, t0.AddSeconds(5)), (c.Status, c.Wait, c.Detail, c.Since));
+    }
+
+    [Fact]
+    public void Unknown_event_with_different_session_keeps_original_card()
+    {
+        var cur = CardOf(SessionStatus.Working, session: "b");
+        Assert.Same(cur, StatusReducer.Apply(cur, Ev("PreCompact", session: "a"), 42));
+    }
+
+    [Fact]
+    public void Idle_prompt_with_different_session_keeps_original_card()
+    {
+        var cur = CardOf(SessionStatus.Idle, session: "b");
+        Assert.Same(cur, StatusReducer.Apply(cur, Ev("Notification", "x", "idle_prompt", session: "a"), 42));
     }
 
     [Fact]
