@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NodLight.Core\NodLight.Core.csproj" />
+    <!-- Build-order only: the helper is bundled by the BundleHook target below, not referenced as an assembly. -->
+    <ProjectReference Include="..\NodLight.Hook\NodLight.Hook.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -11,6 +13,27 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <AssemblyName>NodLight</AssemblyName>
+    <HookProject>$(MSBuildThisFileDirectory)..\NodLight.Hook\NodLight.Hook.csproj</HookProject>
+    <HookPublishDir>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)hook-publish</HookPublishDir>
+    <VsInstallerDir>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer</VsInstallerDir>
   </PropertyGroup>
+
+  <ItemGroup>
+    <HookSource Include="..\NodLight.Hook\**\*.cs;..\NodLight.Hook\*.csproj;..\NodLight.Core\**\*.cs;..\NodLight.Core\*.csproj"
+                Exclude="..\**\obj\**;..\**\bin\**" />
+  </ItemGroup>
+
+  <!-- Publishes the Native AOT helper (nodlight-hook.exe) and copies it next to NodLight.exe. The publish is skipped when up to date.
+       Native AOT's linker discovery needs vswhere.exe on PATH; prepend the VS Installer dir (harmless when absent). -->
+  <Target Name="PublishHook" Inputs="@(HookSource)" Outputs="$(HookPublishDir)\nodlight-hook.exe">
+    <Exec Command="set &quot;PATH=$(VsInstallerDir);%25PATH%25&quot; &amp;&amp; dotnet publish &quot;$(HookProject)&quot; -c $(Configuration) -o &quot;$(HookPublishDir)&quot; --nologo -v:q" />
+    <Error Condition="!Exists('$(HookPublishDir)\nodlight-hook.exe')"
+           Text="Could not produce nodlight-hook.exe. Native AOT publish needs the Visual Studio C++ build tools and vswhere.exe (looked in $(VsInstallerDir) and on PATH)." />
+  </Target>
+
+  <!-- Always copies: the ProjectReference above makes the SDK drop the Hook's plain apphost under the same name. -->
+  <Target Name="BundleHook" AfterTargets="Build" DependsOnTargets="PublishHook">
+    <Copy SourceFiles="$(HookPublishDir)\nodlight-hook.exe" DestinationFolder="$(OutDir)" />
+  </Target>
 
 </Project>

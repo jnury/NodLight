@@ -17,9 +17,8 @@
         TextOptions.TextFormattingMode="Display">
     <Window.ContextMenu>
         <ContextMenu>
-            <!-- Install/Remove hooks are wired up in Task 10. -->
-            <MenuItem x:Name="InstallHooksItem" Header="Install hooks" />
-            <MenuItem x:Name="RemoveHooksItem" Header="Remove hooks" />
+            <MenuItem Header="Install hooks" Click="InstallHooks_Click" />
+            <MenuItem Header="Remove hooks" Click="RemoveHooks_Click" />
             <Separator />
             <MenuItem Header="Exit" Click="Exit_Click" />
         </ContextMenu>

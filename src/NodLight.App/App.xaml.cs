@@ -63,6 +63,9 @@ public partial class App : Application
 
         MainWindow = strip;
         strip.Show();
+
+        // After the strip is up so the deck is usable while the (modal) message box is open.
+        Setup.EnsureInstalled();
     }
 
     protected override void OnExit(ExitEventArgs e)

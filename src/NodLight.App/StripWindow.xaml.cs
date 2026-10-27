@@ -54,5 +54,9 @@ public partial class StripWindow : Window
         if (sender is FrameworkElement { DataContext: CardViewModel card }) deck.Activate(card);
     }
 
+    void InstallHooks_Click(object sender, RoutedEventArgs e) => Setup.InstallFromMenu();
+
+    void RemoveHooks_Click(object sender, RoutedEventArgs e) => Setup.RemoveFromMenu();
+
     void Exit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
 }
