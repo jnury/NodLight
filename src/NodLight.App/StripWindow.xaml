@@ -1,0 +1,86 @@
+<Window x:Class="NodLight.App.StripWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:NodLight.App"
+        Title="NodLight"
+        Width="240"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Background="#11111B"
+        BorderBrush="#333333"
+        BorderThickness="1,0,0,0"
+        FontFamily="Segoe UI"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+    <Window.ContextMenu>
+        <ContextMenu>
+            <!-- Install/Remove hooks are wired up in Task 10. -->
+            <MenuItem x:Name="InstallHooksItem" Header="Install hooks" />
+            <MenuItem x:Name="RemoveHooksItem" Header="Remove hooks" />
+            <Separator />
+            <MenuItem Header="Exit" Click="Exit_Click" />
+        </ContextMenu>
+    </Window.ContextMenu>
+
+    <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding Cards}" Margin="6,6,6,1">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type local:CardViewModel}">
+                    <Border Margin="0,0,0,5"
+                            Padding="7,6,7,6"
+                            CornerRadius="4"
+                            BorderThickness="3,0,0,0"
+                            BorderBrush="{Binding Brush}"
+                            Background="{Binding Background}"
+                            Cursor="Hand"
+                            MouseLeftButtonUp="Card_MouseLeftButtonUp">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Title}"
+                                           Foreground="{Binding TitleBrush}"
+                                           FontSize="12.5"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap" />
+                                <Border Grid.Column="1"
+                                        Margin="5,0,0,0"
+                                        Padding="4,0,4,1"
+                                        CornerRadius="3"
+                                        VerticalAlignment="Center"
+                                        Background="#444444">
+                                    <TextBlock Text="{Binding AgentBadge}" Foreground="#CCCCCC" FontSize="10" />
+                                </Border>
+                            </Grid>
+                            <TextBlock Text="{Binding StatusLine}"
+                                       Foreground="#999999"
+                                       FontSize="11"
+                                       Margin="0,2,0,0"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Detail}"
+                                       Foreground="#FAB387"
+                                       FontSize="11"
+                                       Margin="0,2,0,0"
+                                       TextTrimming="CharacterEllipsis">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Detail}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </ScrollViewer>
+</Window>
