@@ -13,6 +13,8 @@ public partial class App : Application
     WindowService? windows;
     DispatcherTimer? timer;
 
+    const long LogMaxBytes = 256 * 1024;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -25,6 +27,25 @@ public partial class App : Application
             Shutdown();
             return;
         }
+
+        // A throw past this point must not leave a windowless process holding the mutex: report it and exit.
+        try
+        {
+            Start();
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"NodLight: startup failed: {ex}");
+            MessageBox.Show("NodLight could not start: " + ex.Message, "NodLight", MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown();
+        }
+    }
+
+    void Start()
+    {
+        Trace.AutoFlush = true;
+        Trace.Listeners.Add(new FileTraceListener(Path.Combine(Setup.Paths.InstallDir, "deck.log"), LogMaxBytes));
 
         // Backstop for anything the guarded paths miss: an always-on-top strip should not vanish over one bad event.
         DispatcherUnhandledException += (_, args) =>
@@ -47,8 +68,11 @@ public partial class App : Application
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Another deck (e.g. from a different session of the same user) already owns the pipe.
+            Trace.WriteLine($"NodLight: pipe unavailable: {ex.Message}");
             pipe.Dispose();
             pipe = null;
+            MessageBox.Show("Another NodLight is already receiving hook events (the pipe is in use). This one will exit.",
+                "NodLight", MessageBoxButton.OK, MessageBoxImage.Warning);
             Shutdown();
             return;
         }

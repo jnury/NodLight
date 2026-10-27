@@ -35,6 +35,7 @@
                             BorderBrush="{Binding Brush}"
                             Background="{Binding Background}"
                             Cursor="Hand"
+                            ToolTip="{Binding ToolTip}"
                             MouseLeftButtonUp="Card_MouseLeftButtonUp">
                         <StackPanel>
                             <Grid>

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using NodLight.Core;
@@ -60,16 +61,20 @@ public static class Setup
         Run(Paths.CodexHooks, () => HookInstaller.UninstallFile(Paths.CodexHooks)),
     ]);
 
-    /// <summary>True when either agent's file lacks NodLight hooks (a missing file counts as lacking them).</summary>
+    /// <summary>
+    /// True when either agent's file lacks current NodLight hooks: a missing file, missing events, or entries with a
+    /// stale command (another helper path, or the older quoted form that PowerShell cannot run) all count as lacking.
+    /// </summary>
     public static bool NeedsInstall()
     {
-        return Lacks(Paths.ClaudeSettings, AgentKind.Claude) || Lacks(Paths.CodexHooks, AgentKind.Codex);
+        var helper = Paths.InstalledHelper;
+        return Lacks(Paths.ClaudeSettings, AgentKind.Claude, helper) || Lacks(Paths.CodexHooks, AgentKind.Codex, helper);
 
-        static bool Lacks(string path, AgentKind kind)
+        static bool Lacks(string path, AgentKind kind, string helper)
         {
             try
             {
-                return !HookInstaller.IsInstalled(File.Exists(path) ? File.ReadAllText(path) : null, kind);
+                return !HookInstaller.IsCurrent(File.Exists(path) ? File.ReadAllText(path) : null, kind, helper);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
             {
@@ -78,16 +83,49 @@ public static class Setup
         }
     }
 
-    /// <summary>Startup path: null when nothing needed doing.</summary>
-    public static SetupResult? EnsureInstalledResult() => NeedsInstall() ? Install() : null;
+    /// <summary>
+    /// Startup path: installs when hooks are lacking; otherwise only refreshes the installed helper quietly.
+    /// Null when no install was needed (the user is not told about a helper refresh).
+    /// </summary>
+    public static SetupResult? EnsureInstalledResult()
+    {
+        if (NeedsInstall()) return Install(); // Install copies the helper itself
+        RefreshHelper();
+        return null;
+    }
+
+    /// <summary>
+    /// Brings the installed helper up to date with the bundled one (hooks already point at it). A failure, typically
+    /// the old helper running right now, is only traced: the previous helper stays in place and the next launch retries.
+    /// </summary>
+    public static void RefreshHelper()
+    {
+        var bundled = Path.Combine(BundleDir, "nodlight-hook.exe");
+        if (!File.Exists(bundled))
+        {
+            Trace.WriteLine("NodLight: bundled nodlight-hook.exe is missing; installed helper not refreshed.");
+            return;
+        }
+
+        try
+        {
+            if (CopyHelper(bundled, Paths.InstalledHelper).Status == SetupStatus.Done)
+                Trace.WriteLine("NodLight: installed helper refreshed.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Trace.WriteLine($"NodLight: helper refresh failed, retrying next launch: {ex.Message}");
+        }
+    }
 
     // ---- UI layer ----
 
-    public static void EnsureInstalled()
+    // Guarded like the menu handlers: a setup failure at startup must not take the deck down.
+    public static void EnsureInstalled() => Guarded(() =>
     {
         var result = EnsureInstalledResult();
         if (result is not null) Show(result, TrustMessage);
-    }
+    });
 
     public static void InstallFromMenu() => Guarded(() => Show(Install(), TrustMessage));
 

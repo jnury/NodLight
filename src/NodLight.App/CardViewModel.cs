@@ -28,6 +28,9 @@ public sealed class CardViewModel(long hwnd) : INotifyPropertyChanged
     /// <summary>What the session is asking for; null unless Waiting.</summary>
     public string? Detail { get; private set => Set(ref field, value); }
 
+    /// <summary>Card tooltip: the full title, plus the detail on a second line when there is one.</summary>
+    public string ToolTip { get; private set => Set(ref field, value); } = "";
+
     /// <summary>Status colour, used for the left border.</summary>
     public Brush Brush { get; private set => Set(ref field, value); } = IdleBrush;
     public Brush Background { get; private set => Set(ref field, value); } = CardBackground;
@@ -39,6 +42,7 @@ public sealed class CardViewModel(long hwnd) : INotifyPropertyChanged
         AgentBadge = Badge(card.Agent);
         StatusLine = FormatStatusLine(card, now);
         Detail = card.Status == SessionStatus.Waiting && !string.IsNullOrWhiteSpace(card.Detail) ? card.Detail : null;
+        ToolTip = Detail is null ? title : title + Environment.NewLine + Detail;
         Brush = card.Status switch
         {
             SessionStatus.Waiting => WaitingBrush,

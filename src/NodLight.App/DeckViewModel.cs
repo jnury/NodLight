@@ -16,6 +16,9 @@ public sealed class DeckViewModel
     readonly Func<DateTimeOffset> clock;
     readonly Dictionary<string, TranscriptTail> tails = new(StringComparer.OrdinalIgnoreCase);
 
+    // The Alacritty pid each card's window was found for; a window that no longer belongs to it is treated as gone.
+    readonly Dictionary<long, int> pids = new();
+
     public ObservableCollection<CardViewModel> Cards { get; } = [];
 
     public DeckViewModel(SessionStore store, WindowService windows, Func<DateTimeOffset> clock)
@@ -29,13 +32,21 @@ public sealed class DeckViewModel
     /// <summary>A hook event, already marshalled to the UI thread. Dropped when its terminal has no window.</summary>
     public void OnHookEvent(HookEvent e) => Guard("hook event", () =>
     {
-        if (windows.FindMainWindow(e.AlacrittyPid) is { } hwnd) store.Apply(e, hwnd);
+        if (windows.FindMainWindow(e.AlacrittyPid) is not { } hwnd) return;
+        pids[hwnd] = e.AlacrittyPid; // before Apply: the store's Changed handler (Sync) prunes pids without cards
+        store.Apply(e, hwnd);
+        // No foreground-change event fires when the event comes from the window the user is already in,
+        // so a "your turn" there is read immediately.
+        if (windows.IsForeground(hwnd)) store.Foreground(hwnd, clock());
     });
 
     /// <summary>Unknown windows (anything without a card) are ignored by the store.</summary>
     public void OnForeground(long hwnd) => Guard("foreground", () => store.Foreground(hwnd, clock()));
 
-    public void Activate(CardViewModel card) => windows.Focus(card.Hwnd);
+    public void Activate(CardViewModel card)
+    {
+        if (pids.TryGetValue(card.Hwnd, out var pid)) windows.Focus(card.Hwnd, pid);
+    }
 
     /// <summary>
     /// Once a second: drop closed windows, check transcripts for interrupts, refresh titles and times.
@@ -46,7 +57,8 @@ public sealed class DeckViewModel
         foreach (var card in store.Cards)
             Guard("window check", () =>
             {
-                if (!windows.IsAlive(card.Hwnd)) store.WindowClosed(card.Hwnd);
+                if (!pids.TryGetValue(card.Hwnd, out var pid) || !windows.IsAlive(card.Hwnd, pid))
+                    store.WindowClosed(card.Hwnd);
             });
 
         PollTranscripts();
@@ -99,6 +111,9 @@ public sealed class DeckViewModel
         }
 
         foreach (var gone in existing.Values) Cards.Remove(gone);
+
+        var live = ordered.Select(c => c.Hwnd).ToHashSet();
+        foreach (var hwnd in pids.Keys.Where(h => !live.Contains(h)).ToList()) pids.Remove(hwnd);
     });
 
     // The deck must survive a bug in one code path; failures go to the trace listeners instead of the user.

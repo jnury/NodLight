@@ -28,9 +28,10 @@ public sealed class WindowService : IDisposable
     }
 
     /// <summary>
-    /// The terminal window of the process, or null. Assumes one alacritty.exe process per window (the plan's premise):
-    /// the current foreground window is preferred when it belongs to the process (the hook fired from the window the user
-    /// is in), otherwise the first candidate in Z-order. Candidates are visible, unowned, not tool windows and not cloaked.
+    /// The terminal window of the process, or null. Assumes one alacritty.exe process per window (the plan's premise).
+    /// Candidates are visible, unowned and not tool windows; they are ranked rather than filtered: the current foreground
+    /// window when it belongs to the process (the hook fired from the window the user is in), then the first non-cloaked
+    /// candidate in Z-order, then the first cloaked one (a terminal on another virtual desktop is cloaked but still real).
     /// </summary>
     public long? FindMainWindow(int pid)
     {
@@ -38,29 +39,38 @@ public sealed class WindowService : IDisposable
         var foreground = GetForegroundWindow();
         if (foreground != 0 && IsCandidate(foreground, pid)) return foreground;
 
-        long? found = null;
+        long? visible = null, cloaked = null;
         EnumWindows((hwnd, _) =>
         {
             if (!IsCandidate(hwnd, pid)) return true;
-            found = hwnd;
-            return false;
+            if (!IsCloaked(hwnd))
+            {
+                visible = hwnd;
+                return false;
+            }
+            cloaked ??= hwnd;
+            return true;
         }, 0);
-        return found;
+        return visible ?? cloaked;
     }
 
-    static bool IsCandidate(nint hwnd, int pid)
+    static bool IsCandidate(nint hwnd, int pid) =>
+        IsOwnedBy(hwnd, pid)
+        && IsWindowVisible(hwnd)
+        && GetWindow(hwnd, GW_OWNER) == 0
+        && (GetExStyle(hwnd) & WS_EX_TOOLWINDOW) == 0;
+
+    static bool IsOwnedBy(nint hwnd, int pid)
     {
         GetWindowThreadProcessId(hwnd, out var owner);
-        return owner == (uint)pid
-            && IsWindowVisible(hwnd)
-            && GetWindow(hwnd, GW_OWNER) == 0
-            && (GetExStyle(hwnd) & WS_EX_TOOLWINDOW) == 0
-            && !IsCloaked(hwnd);
+        return owner == (uint)pid;
     }
 
     // Cloaked windows (other virtual desktops, suspended UWP frames) report visible but are not on screen.
     static bool IsCloaked(nint hwnd) =>
         DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out var cloaked, sizeof(int)) == 0 && cloaked != 0;
+
+    public bool IsForeground(long hwnd) => hwnd != 0 && GetForegroundWindow() == (nint)hwnd;
 
     public string GetTitle(long hwnd)
     {
@@ -71,13 +81,20 @@ public sealed class WindowService : IDisposable
         return sb.ToString();
     }
 
-    public bool IsAlive(long hwnd) => IsWindow((nint)hwnd);
+    /// <summary>
+    /// The window still exists and still belongs to <paramref name="pid"/> (a recycled HWND of another process is dead).
+    /// Cloaked windows (other virtual desktops) are alive.
+    /// </summary>
+    public bool IsAlive(long hwnd, int pid) => IsWindow((nint)hwnd) && IsOwnedBy((nint)hwnd, pid);
 
-    /// <summary>Restores the window if minimised and brings it to the front. Best effort; never throws.</summary>
-    public void Focus(long hwnd)
+    /// <summary>
+    /// Restores the window if minimised and brings it to the front; does nothing unless it still belongs to
+    /// <paramref name="pid"/>. Best effort; never throws.
+    /// </summary>
+    public void Focus(long hwnd, int pid)
     {
         var h = (nint)hwnd;
-        if (!IsWindow(h)) return;
+        if (!IsAlive(hwnd, pid)) return;
         if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
         if (SetForegroundWindow(h)) return;
 
