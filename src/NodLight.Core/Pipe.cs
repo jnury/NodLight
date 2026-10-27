@@ -38,11 +38,12 @@ public static class PipeClient
     {
         try
         {
+            // One budget shared by the existence check, connect and write.
             var sw = Stopwatch.StartNew();
             if (!PipeExists(pipeName)) return false;
 
             using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.Asynchronous);
-            client.Connect(timeoutMs);
+            client.Connect(Math.Max(1, timeoutMs - (int)sw.ElapsedMilliseconds));
 
             var remaining = timeoutMs - (int)sw.ElapsedMilliseconds;
             if (remaining <= 0) return false;
@@ -59,13 +60,13 @@ public static class PipeClient
         }
     }
 
-    // Enumerating \.\pipe\ does not connect to (and so never consumes) a pipe instance.
+    // Enumerating \\.\pipe\ does not connect to (and so never consumes) a pipe instance.
     // If enumeration itself fails we assume the pipe may exist and let Connect decide.
     static bool PipeExists(string pipeName)
     {
         try
         {
-            return Directory.EnumerateFileSystemEntries(@"\.\pipe\", pipeName).Any();
+            return Directory.EnumerateFileSystemEntries(@"\\.\pipe\", pipeName).Any();
         }
         catch
         {
@@ -80,59 +81,73 @@ public sealed class PipeServer(string pipeName, Action<HookEvent> onEvent) : IDi
 
     readonly CancellationTokenSource cts = new();
     Task? loop;
+    int disposed;
 
+    /// <summary>
+    /// Starts listening. The first instance is created with <see cref="PipeOptions.FirstPipeInstance"/>,
+    /// so if another process already owns the pipe name this throws (IOException or
+    /// UnauthorizedAccessException) instead of silently listening beside a squatter.
+    /// </summary>
     public void Start()
     {
         if (loop is not null) return;
         // The first instance is created synchronously so a client that sends right
         // after Start() returns can always connect.
-        var first = CreateInstance();
+        var first = CreateInstance(PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance);
         loop = Task.Run(() => AcceptLoop(first));
     }
 
-    NamedPipeServerStream CreateInstance()
+    NamedPipeServerStream CreateInstance(PipeOptions options = PipeOptions.Asynchronous)
     {
         // Restrict to the current user. Multiple instances are allowed so a fresh
         // listener can be created while earlier connections are still being handled.
+        if (!OperatingSystem.IsWindows())
+            return new NamedPipeServerStream(pipeName, PipeDirection.In,
+                NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, options);
         var security = new PipeSecurity();
         security.AddAccessRule(new PipeAccessRule(
             WindowsIdentity.GetCurrent().User!, PipeAccessRights.FullControl, AccessControlType.Allow));
         return NamedPipeServerStreamAcl.Create(
             pipeName, PipeDirection.In, NamedPipeServerStream.MaxAllowedServerInstances,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
+            PipeTransmissionMode.Byte, options, 0, 0, security);
     }
 
-    async Task AcceptLoop(NamedPipeServerStream pipe)
+    // Never exits except on cancellation. `pipe` is null whenever no listening instance exists.
+    async Task AcceptLoop(NamedPipeServerStream? pipe)
     {
         var token = cts.Token;
-        while (!token.IsCancellationRequested)
+        try
         {
-            try
+            while (!token.IsCancellationRequested)
             {
-                await pipe.WaitForConnectionAsync(token).ConfigureAwait(false);
-                var connected = pipe;
-                pipe = CreateInstance();
-                _ = Task.Run(() => HandleAsync(connected, token));
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch
-            {
-                // Client vanished mid-accept or instance creation failed: recycle and carry on.
-                pipe.Dispose();
-                try { pipe = CreateInstance(); }
+                try
+                {
+                    pipe ??= CreateInstance();
+                    await pipe.WaitForConnectionAsync(token).ConfigureAwait(false);
+                    var connected = pipe;
+                    pipe = null; // ownership moves to the handler
+                    _ = Task.Run(() => HandleAsync(connected, token));
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    break;
+                }
                 catch
                 {
-                    try { await Task.Delay(100, token).ConfigureAwait(false); } catch { break; }
-                    pipe = CreateInstance();
+                    // Client vanished mid-accept or instance creation failed: drop only a
+                    // pipe that was not handed off, back off briefly, and retry.
+                    pipe?.Dispose();
+                    pipe = null;
+                    try { await Task.Delay(100, token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { break; }
                 }
             }
         }
-        pipe.Dispose();
+        finally
+        {
+            pipe?.Dispose();
+        }
     }
-
     async Task HandleAsync(NamedPipeServerStream pipe, CancellationToken token)
     {
         try
@@ -157,6 +172,7 @@ public sealed class PipeServer(string pipeName, Action<HookEvent> onEvent) : IDi
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref disposed, 1) == 1) return;
         cts.Cancel();
         try { loop?.Wait(TimeSpan.FromSeconds(2)); } catch { }
         cts.Dispose();

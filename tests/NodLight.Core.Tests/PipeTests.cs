@@ -35,7 +35,7 @@ public class PipeTests
     }
 
     [Fact]
-    public void Server_receives_sent_event()
+    public async Task Server_receives_sent_event()
     {
         var name = UniqueName();
         var tcs = new TaskCompletionSource<HookEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -43,8 +43,8 @@ public class PipeTests
         server.Start();
 
         Assert.True(PipeClient.TrySend(name, Sample(), 1000));
-        Assert.True(tcs.Task.Wait(2000));
-        Assert.Equal(Sample(), tcs.Task.Result);
+        var got = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(Sample(), got);
     }
 
     [Fact]
@@ -96,10 +96,33 @@ public class PipeTests
     [Fact]
     public void TrySend_without_server_returns_false_within_500ms()
     {
+        Assert.False(PipeClient.TrySend(UniqueName(), Sample())); // warm-up (JIT)
+
         var sw = Stopwatch.StartNew();
         var ok = PipeClient.TrySend(UniqueName(), Sample());
         sw.Stop();
         Assert.False(ok);
-        Assert.True(sw.ElapsedMilliseconds < 500, $"took {sw.ElapsedMilliseconds} ms");
+        // A dead existence check would wait the full 200 ms inside Connect; a working one
+        // returns in a few ms. 100 ms leaves ample headroom for a loaded machine.
+        Assert.True(sw.ElapsedMilliseconds < 100, $"took {sw.ElapsedMilliseconds} ms");
+    }
+
+    [Fact]
+    public void Starting_second_server_on_same_name_throws()
+    {
+        var name = UniqueName();
+        using var first = new PipeServer(name, _ => { });
+        first.Start();
+        using var second = new PipeServer(name, _ => { });
+        Assert.ThrowsAny<Exception>(() => second.Start());
+    }
+
+    [Fact]
+    public void Dispose_is_idempotent()
+    {
+        var server = new PipeServer(UniqueName(), _ => { });
+        server.Start();
+        server.Dispose();
+        server.Dispose();
     }
 }
