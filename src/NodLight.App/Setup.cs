@@ -89,9 +89,22 @@ public static class Setup
         if (result is not null) Show(result, TrustMessage);
     }
 
-    public static void InstallFromMenu() => Show(Install(), TrustMessage);
+    public static void InstallFromMenu() => Guarded(() => Show(Install(), TrustMessage));
 
-    public static void RemoveFromMenu() => Show(Remove(), "NodLight hooks removed.");
+    public static void RemoveFromMenu() => Guarded(() => Show(Remove(), "NodLight hooks removed."));
+
+    // Menu handlers must never take the deck down over an unexpected error.
+    static void Guarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Unexpected error: " + ex.Message, "NodLight", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     static void Show(SetupResult result, string success)
     {
@@ -120,9 +133,20 @@ public static class Setup
         if (d.Exists && d.Length == s.Length && d.LastWriteTimeUtc == s.LastWriteTimeUtc)
             return new SetupOutcome(dest, SetupStatus.Unchanged);
 
+        // Copy beside the target, then move over it: a hook launched mid-copy never sees a half-written exe, and a
+        // failure (e.g. the old exe is running) leaves the previous one intact.
         Directory.CreateDirectory(Paths.InstallDir);
-        File.Copy(source, dest, overwrite: true);
-        File.SetLastWriteTimeUtc(dest, s.LastWriteTimeUtc);
+        var tmp = dest + ".new";
+        try
+        {
+            File.Copy(source, tmp, overwrite: true);
+            File.SetLastWriteTimeUtc(tmp, s.LastWriteTimeUtc);
+            File.Move(tmp, dest, overwrite: true);
+        }
+        finally
+        {
+            try { File.Delete(tmp); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
         return new SetupOutcome(dest, SetupStatus.Done);
     }
 
