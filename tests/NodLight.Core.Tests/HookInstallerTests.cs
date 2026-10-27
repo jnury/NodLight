@@ -122,6 +122,50 @@ public sealed class HookInstallerTests : IDisposable
         Assert.Equal(3, Parse(result)["hooks"]!.AsObject().Count);
     }
 
+    const string Mixed = """{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"my.sh"},{"type":"command","command":"\"C:/old/nodlight-hook.exe\" claude Stop","timeout":5},{"type":"command","command":"after.sh"}]}]}}""";
+
+    [Fact]
+    public void Merge_on_mixed_group_refreshes_only_nodlight_entry_in_place()
+    {
+        var merged = HookInstaller.Merge(Mixed, AgentKind.Claude, Helper);
+        var stop = Parse(merged)["hooks"]!["Stop"]!.AsArray();
+        Assert.Single(stop);
+        var inner = stop[0]!["hooks"]!.AsArray();
+        Assert.Equal(3, inner.Count);
+        Assert.Equal("my.sh", (string)inner[0]!["command"]!);
+        Assert.Equal($"\"{HelperFwd}\" claude Stop", (string)inner[1]!["command"]!);
+        Assert.Equal("after.sh", (string)inner[2]!["command"]!);
+        Assert.Equal(merged, HookInstaller.Merge(merged, AgentKind.Claude, Helper));
+    }
+
+    [Fact]
+    public void Unmerge_on_mixed_group_keeps_user_hooks_and_their_order()
+    {
+        var root = Parse(HookInstaller.Unmerge(Mixed));
+        var stop = root["hooks"]!["Stop"]!.AsArray();
+        Assert.Single(stop);
+        var inner = stop[0]!["hooks"]!.AsArray();
+        Assert.Equal(["my.sh", "after.sh"], inner.Select(h => (string)h!["command"]!));
+    }
+
+    [Fact]
+    public void Unmerge_and_IsInstalled_ignore_null_and_non_array_values_under_unrelated_events()
+    {
+        var merged = Parse(HookInstaller.Merge(null, AgentKind.Claude, Helper));
+        merged["hooks"]!["Foo"] = null;
+        merged["hooks"]!["Bar"] = new JsonObject { ["x"] = 1 };
+        merged["hooks"]!["Baz"] = "str";
+        var json = merged.ToJsonString();
+        Assert.True(HookInstaller.IsInstalled(json, AgentKind.Claude));
+
+        var hooks = Parse(HookInstaller.Unmerge(json))["hooks"]!.AsObject();
+        Assert.Equal(3, hooks.Count);
+        Assert.Null(hooks["Foo"]);
+        Assert.True(hooks.ContainsKey("Foo"));
+        Assert.Equal(1, (int)hooks["Bar"]!["x"]!);
+        Assert.Equal("str", (string)hooks["Baz"]!);
+    }
+
     [Fact]
     public void Unmerge_everything_nodlight_leaves_no_empty_event_arrays()
     {

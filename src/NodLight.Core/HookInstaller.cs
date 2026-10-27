@@ -7,7 +7,8 @@ namespace NodLight.Core;
 
 /// <summary>
 /// Adds and removes NodLight hook groups in Claude (settings.json) and Codex (hooks.json) config files.
-/// NodLight only appends its own group to each event array and never edits groups it did not write.
+/// NodLight works at hook-entry granularity: it appends its own group to an event array when no nodlight-hook entry
+/// exists, refreshes or removes only its own entries otherwise, and leaves every other entry and group untouched.
 /// </summary>
 public static class HookInstaller
 {
@@ -36,11 +37,20 @@ public static class HookInstaller
 
         foreach (var ev in EventsFor(agent))
         {
-            var group = NewGroup(ev, $"\"{helper}\" {agentArg} {ev}");
+            var command = $"\"{helper}\" {agentArg} {ev}";
             var array = EventArray(hooks, ev, create: true)!;
-            var idx = IndexOfNodLightGroup(array);
-            if (idx >= 0) array[idx] = group; // refresh in place so repeated merges are stable
-            else array.Add(group);
+            var entry = FindNodLightEntry(array);
+            if (entry is null)
+            {
+                array.Add(NewGroup(ev, command));
+            }
+            else
+            {
+                // refresh in place so repeated merges are stable and neighbouring entries stay untouched
+                entry["type"] = "command";
+                entry["command"] = command;
+                entry["timeout"] = 5;
+            }
         }
 
         return root.ToJsonString(Output);
@@ -55,11 +65,20 @@ public static class HookInstaller
         var changed = false;
         foreach (var ev in hooks.Select(p => p.Key).ToList())
         {
-            var array = EventArray(hooks, ev, create: false)!;
-            var before = array.Count;
+            if (hooks[ev] is not JsonArray array) continue; // not ours: never throw on unrelated values
+            var removed = false;
             for (var i = array.Count - 1; i >= 0; i--)
-                if (IsNodLightGroup(array[i])) array.RemoveAt(i);
-            if (array.Count == before) continue;
+            {
+                if (array[i] is not JsonObject group || group["hooks"] is not JsonArray inner) continue;
+                for (var j = inner.Count - 1; j >= 0; j--)
+                {
+                    if (!IsNodLightEntry(inner[j])) continue;
+                    inner.RemoveAt(j);
+                    removed = true;
+                    if (inner.Count == 0) array.RemoveAt(i); // drop the group only if we emptied it
+                }
+            }
+            if (!removed) continue;
             changed = true;
             if (array.Count == 0) hooks.Remove(ev); // only drop arrays we emptied, never the user's own
         }
@@ -80,7 +99,7 @@ public static class HookInstaller
         foreach (var ev in EventsFor(agent))
         {
             if (!hooks.TryGetPropertyValue(ev, out var node) || node is not JsonArray array
-                || IndexOfNodLightGroup(array) < 0)
+                || FindNodLightEntry(array) is null)
                 return false;
         }
         return true;
@@ -170,15 +189,16 @@ public static class HookInstaller
         return group;
     }
 
-    static int IndexOfNodLightGroup(JsonArray array)
+    static JsonObject? FindNodLightEntry(JsonArray eventArray)
     {
-        for (var i = 0; i < array.Count; i++)
-            if (IsNodLightGroup(array[i])) return i;
-        return -1;
+        foreach (var group in eventArray)
+            if (group is JsonObject g && g["hooks"] is JsonArray inner)
+                foreach (var entry in inner)
+                    if (IsNodLightEntry(entry)) return (JsonObject)entry!;
+        return null;
     }
 
-    static bool IsNodLightGroup(JsonNode? group) =>
-        group is JsonObject g && g["hooks"] is JsonArray inner && inner.Any(h =>
-            h is JsonObject o && o["command"] is JsonValue v && v.TryGetValue<string>(out var cmd)
-            && cmd.Contains(Marker, StringComparison.OrdinalIgnoreCase));
+    static bool IsNodLightEntry(JsonNode? entry) =>
+        entry is JsonObject o && o["command"] is JsonValue v && v.TryGetValue<string>(out var cmd)
+        && cmd.Contains(Marker, StringComparison.OrdinalIgnoreCase);
 }
