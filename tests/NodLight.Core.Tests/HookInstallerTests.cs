@@ -7,6 +7,7 @@ public sealed class HookInstallerTests : IDisposable
 {
     const string Helper = @"C:\Apps\NodLight\nodlight-hook.exe";
     const string HelperFwd = "C:/Apps/NodLight/nodlight-hook.exe";
+    const string SpacedHelper = @"C:\Program Files\NodLight\nodlight-hook.exe";
 
     readonly string dir = Path.Combine(Path.GetTempPath(), "nodlight-tests-" + Guid.NewGuid().ToString("N"));
 
@@ -37,7 +38,7 @@ public sealed class HookInstallerTests : IDisposable
         Assert.Equal(7, HookInstaller.ClaudeEvents.Length);
         foreach (var ev in HookInstaller.ClaudeEvents)
         {
-            Assert.Equal($"\"{HelperFwd}\" claude {ev}", Command(root, ev));
+            Assert.Equal($"{HelperFwd} claude {ev}", Command(root, ev));
             var hook = root["hooks"]![ev]![0]!["hooks"]![0]!;
             Assert.Equal("command", (string)hook["type"]!);
             Assert.Equal(5, (int)hook["timeout"]!);
@@ -72,7 +73,7 @@ public sealed class HookInstallerTests : IDisposable
         var stop = root["hooks"]!["Stop"]!.AsArray();
         Assert.Equal(2, stop.Count);
         Assert.Equal("my-stop.sh", (string)stop[0]!["hooks"]![0]!["command"]!);
-        Assert.Equal($"\"{HelperFwd}\" claude Stop", Command(root, "Stop", 1));
+        Assert.Equal($"{HelperFwd} claude Stop", Command(root, "Stop", 1));
     }
 
     [Fact]
@@ -85,8 +86,65 @@ public sealed class HookInstallerTests : IDisposable
     [Fact]
     public void Merge_output_keeps_quotes_readable()
     {
-        Assert.Contains("\\\"C:/Apps/NodLight/nodlight-hook.exe\\\" claude Stop",
-            HookInstaller.Merge(null, AgentKind.Claude, Helper));
+        Assert.Contains("\\\"C:/Program Files/NodLight/nodlight-hook.exe\\\" claude Stop",
+            HookInstaller.Merge(null, AgentKind.Claude, SpacedHelper));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Apps\NodLight\nodlight-hook.exe", "C:/Apps/NodLight/nodlight-hook.exe claude Stop")]
+    [InlineData(@"C:\Users\Jnury\AppData\Local\NodLight\nodlight-hook.exe",
+        "C:/Users/Jnury/AppData/Local/NodLight/nodlight-hook.exe claude Stop")]
+    [InlineData(@"D:\my-tools\Nod_Light.v2\nodlight-hook.exe", "D:/my-tools/Nod_Light.v2/nodlight-hook.exe claude Stop")]
+    public void Command_is_unquoted_for_a_plain_path(string helper, string expected) =>
+        Assert.Equal(expected, HookInstaller.CommandFor(helper, AgentKind.Claude, "Stop"));
+
+    [Theory]
+    [InlineData(@"C:\Program Files\NodLight\nodlight-hook.exe", "\"C:/Program Files/NodLight/nodlight-hook.exe\" codex Stop")]
+    [InlineData(@"C:\Tools(x86)\nodlight-hook.exe", "\"C:/Tools(x86)/nodlight-hook.exe\" codex Stop")]
+    [InlineData(@"C:\A&B\nodlight-hook.exe", "\"C:/A&B/nodlight-hook.exe\" codex Stop")]
+    [InlineData(@"C:\Users\JNURY~1\nodlight-hook.exe", "\"C:/Users/JNURY~1/nodlight-hook.exe\" codex Stop")]
+    [InlineData(@"C:\$dir\nodlight-hook.exe", "\"C:/$dir/nodlight-hook.exe\" codex Stop")]
+    public void Command_falls_back_to_quoted_for_spaces_or_metacharacters(string helper, string expected) =>
+        Assert.Equal(expected, HookInstaller.CommandFor(helper, AgentKind.Codex, "Stop"));
+
+    [Fact]
+    public void Merge_with_spaced_helper_uses_quoted_command_and_twice_is_noop()
+    {
+        var once = HookInstaller.Merge(null, AgentKind.Claude, SpacedHelper);
+        Assert.Equal("\"C:/Program Files/NodLight/nodlight-hook.exe\" claude Stop", Command(Parse(once), "Stop"));
+        Assert.Equal(once, HookInstaller.Merge(once, AgentKind.Claude, SpacedHelper));
+    }
+
+    [Fact]
+    public void Merge_upgrades_a_previously_installed_quoted_command()
+    {
+        var quoted = HookInstaller.Merge(null, AgentKind.Claude, Helper)
+            .Replace($"{HelperFwd} claude", $"\\\"{HelperFwd}\\\" claude");
+        Assert.True(HookInstaller.IsInstalled(quoted, AgentKind.Claude));
+        Assert.False(HookInstaller.IsCurrent(quoted, AgentKind.Claude, Helper));
+        Assert.Equal($"\"{HelperFwd}\" claude Stop", Command(Parse(quoted), "Stop"));
+
+        var upgraded = HookInstaller.Merge(quoted, AgentKind.Claude, Helper);
+        var root = Parse(upgraded);
+        Assert.Single(root["hooks"]!["Stop"]!.AsArray());
+        Assert.Equal($"{HelperFwd} claude Stop", Command(root, "Stop"));
+        Assert.True(HookInstaller.IsCurrent(upgraded, AgentKind.Claude, Helper));
+        Assert.Equal(upgraded, HookInstaller.Merge(upgraded, AgentKind.Claude, Helper));
+    }
+
+    [Fact]
+    public void IsCurrent_requires_every_event_with_exactly_the_current_command()
+    {
+        Assert.False(HookInstaller.IsCurrent(null, AgentKind.Claude, Helper));
+        Assert.False(HookInstaller.IsCurrent("not json", AgentKind.Claude, Helper));
+        var merged = HookInstaller.Merge(null, AgentKind.Claude, Helper);
+        Assert.True(HookInstaller.IsCurrent(merged, AgentKind.Claude, Helper));
+        Assert.False(HookInstaller.IsCurrent(merged, AgentKind.Claude, @"C:\Other\nodlight-hook.exe"));
+        Assert.False(HookInstaller.IsCurrent(merged, AgentKind.Codex, Helper));
+
+        var partial = Parse(merged);
+        partial["hooks"]!.AsObject().Remove("Stop");
+        Assert.False(HookInstaller.IsCurrent(partial.ToJsonString(), AgentKind.Claude, Helper));
     }
 
     [Fact]
@@ -133,7 +191,7 @@ public sealed class HookInstallerTests : IDisposable
         var inner = stop[0]!["hooks"]!.AsArray();
         Assert.Equal(3, inner.Count);
         Assert.Equal("my.sh", (string)inner[0]!["command"]!);
-        Assert.Equal($"\"{HelperFwd}\" claude Stop", (string)inner[1]!["command"]!);
+        Assert.Equal($"{HelperFwd} claude Stop", (string)inner[1]!["command"]!); // old quoted entry upgraded
         Assert.Equal("after.sh", (string)inner[2]!["command"]!);
         Assert.Equal(merged, HookInstaller.Merge(merged, AgentKind.Claude, Helper));
     }
@@ -257,5 +315,68 @@ public sealed class HookInstallerTests : IDisposable
         var text = File.ReadAllText(path);
         Assert.False(HookInstaller.IsInstalled(text, AgentKind.Claude));
         Assert.Equal("opus", (string)Parse(text)["model"]!);
+    }
+
+    [Fact]
+    public void InstallFile_and_UninstallFile_leave_no_temp_file_behind()
+    {
+        var path = TempFile("""{"model":"opus"}""");
+        HookInstaller.InstallFile(path, AgentKind.Claude, Helper);
+        Assert.True(HookInstaller.IsInstalled(File.ReadAllText(path), AgentKind.Claude));
+        Assert.False(File.Exists(path + ".nodlight.tmp"));
+
+        HookInstaller.UninstallFile(path);
+        Assert.False(HookInstaller.IsInstalled(File.ReadAllText(path), AgentKind.Claude));
+        Assert.False(File.Exists(path + ".nodlight.tmp"));
+        Assert.Equal(["settings.json", "settings.json.nodlight.bak"],
+            Directory.GetFiles(dir).Select(Path.GetFileName).Order());
+    }
+
+    // A directory squatting on the temp name makes the temp write fail deterministically.
+    [Fact]
+    public void InstallFile_write_failure_leaves_the_original_intact()
+    {
+        const string original = """{"model":"opus"}""";
+        var path = TempFile(original);
+        Directory.CreateDirectory(path + ".nodlight.tmp");
+        Assert.ThrowsAny<Exception>(() => HookInstaller.InstallFile(path, AgentKind.Claude, Helper));
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void UninstallFile_write_failure_leaves_the_original_intact()
+    {
+        var path = TempFile();
+        HookInstaller.InstallFile(path, AgentKind.Claude, Helper);
+        var installed = File.ReadAllText(path);
+        Directory.CreateDirectory(path + ".nodlight.tmp");
+        Assert.ThrowsAny<Exception>(() => HookInstaller.UninstallFile(path));
+        Assert.Equal(installed, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void InstallFile_through_a_symlink_updates_the_target_and_keeps_the_link()
+    {
+        Directory.CreateDirectory(dir);
+        var real = Path.Combine(dir, "real.json");
+        File.WriteAllText(real, """{"model":"opus"}""");
+        var link = Path.Combine(dir, "settings.json");
+        try
+        {
+            File.CreateSymbolicLink(link, real);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return; // no symlink privilege on this machine (needs Developer Mode or elevation)
+        }
+
+        HookInstaller.InstallFile(link, AgentKind.Claude, Helper);
+        Assert.NotNull(new FileInfo(link).LinkTarget);
+        Assert.True(HookInstaller.IsInstalled(File.ReadAllText(real), AgentKind.Claude));
+        Assert.False(File.Exists(real + ".nodlight.tmp"));
+
+        HookInstaller.UninstallFile(link);
+        Assert.NotNull(new FileInfo(link).LinkTarget);
+        Assert.False(HookInstaller.IsInstalled(File.ReadAllText(real), AgentKind.Claude));
     }
 }

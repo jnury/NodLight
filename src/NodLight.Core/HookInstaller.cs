@@ -28,16 +28,32 @@ public static class HookInstaller
 
     static string[] EventsFor(AgentKind agent) => agent == AgentKind.Claude ? ClaudeEvents : CodexEvents;
 
+    // Anything a shell could read as syntax. Whitespace plus quotes, operators, expansion and glob characters.
+    const string ShellSpecial = "\"'`&|;()<>^%$[]{},@#!~=*?";
+
+    /// <summary>
+    /// The hook command for one event: <c>{helper} {agent} {event}</c> with the helper as a forward-slash path.
+    /// A plain path is left unquoted because that form runs under pwsh, cmd and Git Bash alike; pwsh cannot run a
+    /// quoted path without a leading call operator (<c>&amp;</c>), which cmd and bash reject. A path with whitespace
+    /// or shell metacharacters must be quoted, so it falls back to <c>"{helper}" {agent} {event}</c>, which works in
+    /// cmd and Git Bash but not when the agent runs hooks through PowerShell.
+    /// </summary>
+    public static string CommandFor(string helperPath, AgentKind agent, string ev)
+    {
+        var helper = helperPath.Replace('\\', '/');
+        var agentArg = agent == AgentKind.Claude ? "claude" : "codex";
+        var plain = helper.Length > 0 && !helper.Any(c => char.IsWhiteSpace(c) || char.IsControl(c) || ShellSpecial.Contains(c));
+        return plain ? $"{helper} {agentArg} {ev}" : $"\"{helper}\" {agentArg} {ev}";
+    }
+
     public static string Merge(string? existingJson, AgentKind agent, string helperPath)
     {
         var root = ParseRoot(existingJson);
         var hooks = HooksOf(root, create: true)!;
-        var helper = helperPath.Replace('\\', '/');
-        var agentArg = agent == AgentKind.Claude ? "claude" : "codex";
 
         foreach (var ev in EventsFor(agent))
         {
-            var command = $"\"{helper}\" {agentArg} {ev}";
+            var command = CommandFor(helperPath, agent, ev);
             var array = EventArray(hooks, ev, create: true)!;
             var entry = FindNodLightEntry(array);
             if (entry is null)
@@ -105,6 +121,28 @@ public static class HookInstaller
         return true;
     }
 
+    /// <summary>
+    /// True only when every event of <paramref name="agent"/> has a nodlight-hook entry whose command is exactly what
+    /// <see cref="Merge"/> would write for <paramref name="helperPath"/>. False for a stale entry (another helper path,
+    /// or the older quoted form), so the next install refreshes it.
+    /// </summary>
+    public static bool IsCurrent(string? json, AgentKind agent, string helperPath)
+    {
+        JsonObject? hooks;
+        try { hooks = HooksOf(ParseRoot(json), create: false); }
+        catch (InvalidDataException) { return false; }
+        if (hooks is null) return false;
+
+        foreach (var ev in EventsFor(agent))
+        {
+            if (!hooks.TryGetPropertyValue(ev, out var node) || node is not JsonArray array
+                || FindNodLightEntry(array) is not { } entry
+                || entry["command"]?.GetValue<string>() != CommandFor(helperPath, agent, ev))
+                return false;
+        }
+        return true;
+    }
+
     public static void InstallFile(string path, AgentKind agent, string helperPath)
     {
         var exists = File.Exists(path);
@@ -120,7 +158,7 @@ public static class HookInstaller
             Directory.CreateDirectory(parent);
         }
 
-        File.WriteAllText(path, merged, new UTF8Encoding(false));
+        WriteAtomic(path, merged);
     }
 
     public static void UninstallFile(string path)
@@ -128,7 +166,27 @@ public static class HookInstaller
         if (!File.Exists(path)) return;
         var text = File.ReadAllText(path);
         var result = Unmerge(text);
-        if (result != text) File.WriteAllText(path, result, new UTF8Encoding(false));
+        if (result != text) WriteAtomic(path, result);
+    }
+
+    /// <summary>
+    /// Writes beside the target and moves over it, so a crash mid-write never leaves a truncated config.
+    /// A symlinked config (dotfile repos) is resolved first so the link itself is kept and its target updated.
+    /// </summary>
+    static void WriteAtomic(string path, string content)
+    {
+        var info = new FileInfo(path);
+        var target = info.LinkTarget is null ? path : info.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? path;
+        var tmp = target + ".nodlight.tmp";
+        try
+        {
+            File.WriteAllText(tmp, content, new UTF8Encoding(false));
+            File.Move(tmp, target, overwrite: true);
+        }
+        finally
+        {
+            try { File.Delete(tmp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     static JsonObject ParseRoot(string? json)
