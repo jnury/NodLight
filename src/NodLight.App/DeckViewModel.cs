@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using NodLight.Core;
 
 namespace NodLight.App;
@@ -26,21 +27,27 @@ public sealed class DeckViewModel
     }
 
     /// <summary>A hook event, already marshalled to the UI thread. Dropped when its terminal has no window.</summary>
-    public void OnHookEvent(HookEvent e)
+    public void OnHookEvent(HookEvent e) => Guard("hook event", () =>
     {
         if (windows.FindMainWindow(e.AlacrittyPid) is { } hwnd) store.Apply(e, hwnd);
-    }
+    });
 
     /// <summary>Unknown windows (anything without a card) are ignored by the store.</summary>
-    public void OnForeground(long hwnd) => store.Foreground(hwnd, clock());
+    public void OnForeground(long hwnd) => Guard("foreground", () => store.Foreground(hwnd, clock()));
 
     public void Activate(CardViewModel card) => windows.Focus(card.Hwnd);
 
-    /// <summary>Once a second: drop closed windows, check transcripts for interrupts, refresh titles and times.</summary>
+    /// <summary>
+    /// Once a second: drop closed windows, check transcripts for interrupts, refresh titles and times.
+    /// Each card (and each transcript) is guarded separately so one failure does not stall the others.
+    /// </summary>
     public void Tick()
     {
         foreach (var card in store.Cards)
-            if (!windows.IsAlive(card.Hwnd)) store.WindowClosed(card.Hwnd);
+            Guard("window check", () =>
+            {
+                if (!windows.IsAlive(card.Hwnd)) store.WindowClosed(card.Hwnd);
+            });
 
         PollTranscripts();
         Sync();
@@ -59,20 +66,22 @@ public sealed class DeckViewModel
             tails.Remove(stale);
 
         foreach (var group in byPath)
-        {
-            if (!tails.TryGetValue(group.Key, out var tail))
-                tails[group.Key] = tail = new TranscriptTail(group.Key);
+            Guard("transcript poll", () =>
+            {
+                if (!tails.TryGetValue(group.Key, out var tail))
+                    tails[group.Key] = tail = new TranscriptTail(group.Key);
 
-            var lines = tail.ReadNewLines();
-            if (lines.Count == 0) continue;
-            foreach (var card in group)
-                if (lines.Any(line => InterruptDetector.IsInterrupt(card.Agent, line)))
-                    store.Interrupted(card.Hwnd, clock());
-        }
+                var lines = tail.ReadNewLines();
+                if (lines.Count == 0) return;
+                foreach (var card in group)
+                    if (lines.Any(line => InterruptDetector.IsInterrupt(card.Agent, line)))
+                        store.Interrupted(card.Hwnd, clock());
+            });
     }
 
     // Reuses view models by hwnd so the list does not flicker, and moves them into the store's order.
-    void Sync()
+    // Also runs as the store's Changed handler, so it must not throw back into the store's caller.
+    void Sync() => Guard("sync", () =>
     {
         var now = clock();
         var ordered = store.Cards;
@@ -82,7 +91,7 @@ public sealed class DeckViewModel
         {
             var card = ordered[i];
             if (!existing.Remove(card.Hwnd, out var vm)) vm = new CardViewModel(card.Hwnd);
-            vm.Update(card, windows.GetTitle(card.Hwnd), now);
+            Guard("card update", () => vm.Update(card, windows.GetTitle(card.Hwnd), now));
 
             var at = Cards.IndexOf(vm);
             if (at < 0) Cards.Insert(i, vm);
@@ -90,5 +99,18 @@ public sealed class DeckViewModel
         }
 
         foreach (var gone in existing.Values) Cards.Remove(gone);
+    });
+
+    // The deck must survive a bug in one code path; failures go to the trace listeners instead of the user.
+    static void Guard(string what, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"NodLight: {what} failed: {ex}");
+        }
     }
 }

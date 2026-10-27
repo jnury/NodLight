@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using static NodLight.App.Native;
 
@@ -22,22 +23,44 @@ public sealed class WindowService : IDisposable
         foregroundProc = OnWinEvent;
         hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, 0, foregroundProc, 0, 0,
             WINEVENT_OUTOFCONTEXT);
+        if (hook == 0)
+            Trace.WriteLine("NodLight: SetWinEventHook(EVENT_SYSTEM_FOREGROUND) failed; cards will not clear on focus.");
     }
 
-    /// <summary>The first visible, unowned top-level window of the process, or null.</summary>
+    /// <summary>
+    /// The terminal window of the process, or null. Assumes one alacritty.exe process per window (the plan's premise):
+    /// the current foreground window is preferred when it belongs to the process (the hook fired from the window the user
+    /// is in), otherwise the first candidate in Z-order. Candidates are visible, unowned, not tool windows and not cloaked.
+    /// </summary>
     public long? FindMainWindow(int pid)
     {
         if (pid <= 0) return null;
+        var foreground = GetForegroundWindow();
+        if (foreground != 0 && IsCandidate(foreground, pid)) return foreground;
+
         long? found = null;
         EnumWindows((hwnd, _) =>
         {
-            GetWindowThreadProcessId(hwnd, out var owner);
-            if (owner != (uint)pid || !IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != 0) return true;
+            if (!IsCandidate(hwnd, pid)) return true;
             found = hwnd;
             return false;
         }, 0);
         return found;
     }
+
+    static bool IsCandidate(nint hwnd, int pid)
+    {
+        GetWindowThreadProcessId(hwnd, out var owner);
+        return owner == (uint)pid
+            && IsWindowVisible(hwnd)
+            && GetWindow(hwnd, GW_OWNER) == 0
+            && (GetExStyle(hwnd) & WS_EX_TOOLWINDOW) == 0
+            && !IsCloaked(hwnd);
+    }
+
+    // Cloaked windows (other virtual desktops, suspended UWP frames) report visible but are not on screen.
+    static bool IsCloaked(nint hwnd) =>
+        DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out var cloaked, sizeof(int)) == 0 && cloaked != 0;
 
     public string GetTitle(long hwnd)
     {
@@ -77,7 +100,15 @@ public sealed class WindowService : IDisposable
         uint dwmsEventTime)
     {
         if (hwnd == 0 || idObject != OBJID_WINDOW) return;
-        ForegroundChanged?.Invoke(hwnd);
+        // Called from native code: an escaping exception would take the process down.
+        try
+        {
+            ForegroundChanged?.Invoke(hwnd);
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"NodLight: foreground handler failed: {ex}");
+        }
     }
 
     public void Dispose()

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -24,6 +25,13 @@ public partial class App : Application
             Shutdown();
             return;
         }
+
+        // Backstop for anything the guarded paths miss: an always-on-top strip should not vanish over one bad event.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Trace.WriteLine($"NodLight: unhandled UI exception: {args.Exception}");
+            args.Handled = true;
+        };
 
         var store = new SessionStore();
         windows = new WindowService();

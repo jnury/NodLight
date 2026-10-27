@@ -14,6 +14,7 @@ internal static class Native
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
     public const int OBJID_WINDOW = 0;
+    public const int DWMWA_CLOAKED = 14;
 
     public delegate bool EnumWindowsProc(nint hwnd, nint lParam);
 
@@ -77,6 +78,9 @@ internal static class Native
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool UnhookWinEvent(nint hWinEventHook);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(nint hwnd, int attribute, out int value, int size);
 
     // The *Ptr variants only exist in 64-bit user32; 32-bit processes use the plain ones.
     public static long GetExStyle(nint hwnd) =>
