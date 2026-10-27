@@ -14,8 +14,11 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>NodLight</AssemblyName>
     <HookProject>$(MSBuildThisFileDirectory)..\NodLight.Hook\NodLight.Hook.csproj</HookProject>
-    <HookPublishDir>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)hook-publish</HookPublishDir>
+    <HookPublishDir>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)hook-publish\$(Configuration)</HookPublishDir>
     <VsInstallerDir>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer</VsInstallerDir>
+    <!-- With a RID (dotnet publish -r) the AOT Hook counts as self-contained; the reference is build-order only, so the
+         self-contained mismatch check (NETSDK1151) does not apply. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +37,11 @@
   <!-- Always copies: the ProjectReference above makes the SDK drop the Hook's plain apphost under the same name. -->
   <Target Name="BundleHook" AfterTargets="Build" DependsOnTargets="PublishHook">
     <Copy SourceFiles="$(HookPublishDir)\nodlight-hook.exe" DestinationFolder="$(OutDir)" />
+  </Target>
+
+  <!-- Same for `dotnet publish`: runs after the publish copy so the Native AOT helper replaces the plain apphost there too. -->
+  <Target Name="BundleHookPublish" AfterTargets="Publish" DependsOnTargets="PublishHook">
+    <Copy SourceFiles="$(HookPublishDir)\nodlight-hook.exe" DestinationFolder="$(PublishDir)" />
   </Target>
 
 </Project>
