@@ -54,6 +54,49 @@ public class StatusReducerTests
     }
 
     [Fact]
+    public void Auth_success_notification_changes_nothing()
+    {
+        var cur = CardOf(SessionStatus.Working, session: "a");
+        Assert.Same(cur, StatusReducer.Apply(cur, Ev("Notification", "Signed in", "auth_success", session: "a"), 42));
+    }
+
+    [Fact]
+    public void Auth_success_notification_without_a_card_creates_none() =>
+        Assert.Null(StatusReducer.Apply(null, Ev("Notification", "Signed in", "auth_success"), 42));
+
+    [Fact]
+    public void Elicitation_dialog_notification_waits_with_detail()
+    {
+        var c = StatusReducer.Apply(CardOf(SessionStatus.Working), Ev("Notification", "Pick an option", "elicitation_dialog"), 42)!;
+        Assert.Equal((SessionStatus.Waiting, WaitKind.Permission, "Pick an option"), (c.Status, c.Wait, c.Detail));
+    }
+
+    [Fact]
+    public void Notification_without_type_waits_for_older_versions()
+    {
+        var c = StatusReducer.Apply(CardOf(SessionStatus.Working), Ev("Notification", "Claude needs your permission"), 42)!;
+        Assert.Equal((SessionStatus.Waiting, WaitKind.Permission, "Claude needs your permission"), (c.Status, c.Wait, c.Detail));
+    }
+
+    [Fact]
+    public void SessionStart_for_the_same_session_changes_nothing()
+    {
+        // Claude fires SessionStart (source "compact") after auto-compaction, mid-turn.
+        var cur = CardOf(SessionStatus.Working, session: "a");
+        Assert.Same(cur, StatusReducer.Apply(cur, Ev("SessionStart", session: "a", at: t0.AddMinutes(3)), 42));
+
+        var waiting = CardOf(SessionStatus.Waiting, WaitKind.Permission, "x", session: "a");
+        Assert.Same(waiting, StatusReducer.Apply(waiting, Ev("SessionStart", session: "a"), 42));
+    }
+
+    [Fact]
+    public void SessionStart_without_session_ids_still_resets_to_idle()
+    {
+        var c = StatusReducer.Apply(CardOf(SessionStatus.Working), Ev("SessionStart", at: t0.AddMinutes(1)), 42)!;
+        Assert.Equal((SessionStatus.Idle, t0.AddMinutes(1)), (c.Status, c.Since));
+    }
+
+    [Fact]
     public void SessionEnd_removes_card() =>
         Assert.Null(StatusReducer.Apply(CardOf(SessionStatus.Idle), Ev("SessionEnd"), 42));
 

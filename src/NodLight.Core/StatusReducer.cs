@@ -7,12 +7,20 @@ public static class StatusReducer
     {
         if (e.EventName == "SessionEnd") return null;
 
+        // Claude re-fires SessionStart for the running session (e.g. after auto-compaction): not a new session.
+        if (e.EventName == "SessionStart" && current is { SessionId: not null } && current.SessionId == e.SessionId)
+            return current;
+
         (SessionStatus Status, WaitKind Wait, string? Detail)? target = e.EventName switch
         {
             "SessionStart" => (SessionStatus.Idle, WaitKind.None, null),
             "UserPromptSubmit" or "PreToolUse" or "PostToolUse" => (SessionStatus.Working, WaitKind.None, null),
-            "Notification" when e.NotificationType == "idle_prompt" => null,
-            "Notification" or "PermissionRequest" => (SessionStatus.Waiting, WaitKind.Permission, e.Detail),
+            // Only prompts that need the user wait; null (older versions without the field) is treated as one.
+            // Other types (idle_prompt, auth_success, ...) change nothing.
+            "Notification" when e.NotificationType is null or "permission_prompt" or "elicitation_dialog"
+                => (SessionStatus.Waiting, WaitKind.Permission, e.Detail),
+            "Notification" => null,
+            "PermissionRequest" => (SessionStatus.Waiting, WaitKind.Permission, e.Detail),
             "Stop" => (SessionStatus.Waiting, WaitKind.YourTurn, "Your turn"),
             _ => null,
         };

@@ -46,11 +46,22 @@ public static class HookPayloadParser
                 if (tool is null) return null;
                 string? command = null;
                 if (root.TryGetProperty("tool_input", out var input) && input.ValueKind == JsonValueKind.Object)
-                    command = Str(input, "command");
+                    command = Command(input);
                 return string.IsNullOrEmpty(command) ? $"Allow {tool}" : $"Allow {tool}: {command}";
             default:
                 return null;
         }
+    }
+
+    // Codex sends the command either as a string or as an argv array; an array's strings are joined with spaces.
+    static string? Command(JsonElement input)
+    {
+        if (!input.TryGetProperty("command", out var v)) return null;
+        if (v.ValueKind == JsonValueKind.String) return v.GetString();
+        if (v.ValueKind != JsonValueKind.Array) return null;
+        return string.Join(' ', v.EnumerateArray()
+            .Where(a => a.ValueKind == JsonValueKind.String)
+            .Select(a => a.GetString()));
     }
 
     static string? Str(JsonElement obj, string name) =>

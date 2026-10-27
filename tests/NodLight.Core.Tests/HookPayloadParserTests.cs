@@ -26,6 +26,23 @@ public class HookPayloadParserTests
     }
 
     [Fact]
+    public void Codex_command_as_array_is_joined_with_spaces()
+    {
+        var p = HookPayloadParser.Parse(AgentKind.Codex, "PermissionRequest",
+            """{"tool_name":"shell","tool_input":{"command":["npm","run","test"]}}""");
+        Assert.Equal("Allow shell: npm run test", p.Detail);
+    }
+
+    [Fact]
+    public void Command_array_with_non_strings_or_empty_falls_back_to_tool_name()
+    {
+        Assert.Equal("Allow shell", HookPayloadParser.Parse(AgentKind.Codex, "PermissionRequest",
+            """{"tool_name":"shell","tool_input":{"command":[]}}""").Detail);
+        Assert.Equal("Allow shell: git status", HookPayloadParser.Parse(AgentKind.Codex, "PermissionRequest",
+            """{"tool_name":"shell","tool_input":{"command":["git",1,null,"status"]}}""").Detail);
+    }
+
+    [Fact]
     public void Long_detail_truncated_to_80_chars_with_ellipsis()
     {
         var long_ = new string('x', 200);
