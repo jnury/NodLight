@@ -7,6 +7,8 @@ using NodLight.Hook;
 // Exception: --dump-chain is a manual diagnostic and prints to stdout.
 const int StdinBudgetMs = 150; // pipe send has its own separate 200 ms budget
 
+var at = DateTimeOffset.UtcNow; // when the agent fired the hook, before any of the work below
+
 try
 {
     if (args is ["--dump-chain"])
@@ -15,6 +17,9 @@ try
             Console.Out.WriteLine($"{p.Pid} {p.Name}");
         return 0;
     }
+
+    // Drain stdin before any drop path, so the agent never blocks writing a large payload to a helper that left early.
+    var json = ReadStdin(StdinBudgetMs);
 
     if (args.Length != 2) return 0;
     AgentKind agent;
@@ -26,10 +31,9 @@ try
     var chain = ProcessChain.Resolve(Environment.ProcessId, new Win32ProcessTree());
     if (chain.AlacrittyPid is not { } alacrittyPid || chain.Nested) return 0;
 
-    var json = ReadStdin(StdinBudgetMs);
     var payload = HookPayloadParser.Parse(agent, eventName, json);
     var ev = new HookEvent(agent, eventName, payload.SessionId, payload.Cwd, payload.TranscriptPath,
-        payload.Detail, payload.NotificationType, alacrittyPid, DateTimeOffset.UtcNow);
+        payload.Detail, payload.NotificationType, alacrittyPid, at);
     PipeClient.TrySend(PipeProtocol.PipeName, ev);
 }
 catch
