@@ -1,0 +1,32 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!--
+    Per-user MSI (no admin rights): installs under %LocalAppData%\Programs\NodLight.
+    It packages a published folder, so publish first:
+
+      dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=true -o artifacts/publish
+      dotnet build installer -c Release -p:Version=1.2.3 -p:PublishDir=artifacts/publish
+  -->
+  <PropertyGroup>
+    <OutputName>NodLight</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\artifacts\publish</PublishDir>
+    <DefineConstants>$(DefineConstants);Version=$(Version);PublishDir=$([System.IO.Path]::GetFullPath('$(PublishDir)'))</DefineConstants>
+    <!-- Harvested file components in a per-user package have no HKCU key path; the profile folder makes that fine. -->
+    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Heat" Version="5.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <HarvestDirectory Include="$(PublishDir)">
+      <ComponentGroupName>AppFiles</ComponentGroupName>
+      <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+      <PreprocessorVariable>var.PublishDir</PreprocessorVariable>
+    </HarvestDirectory>
+  </ItemGroup>
+
+</Project>

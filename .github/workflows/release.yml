@@ -1,0 +1,84 @@
+name: Release
+
+# Tag a version (git tag v1.2.3 && git push --tags) to build the MSI and the portable zip and attach them to a
+# GitHub release. "Run workflow" from the Actions tab builds the same files as a downloadable artifact without
+# publishing anything.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build (x.y.z)
+        default: 1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Version
+        id: v
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '${{ inputs.version }}' }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must look like 1.2.3, got '$version'" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Test
+        run: dotnet test NodLight.sln -c Release --nologo -p:Version=${{ steps.v.outputs.version }}
+
+      # Self-contained, so the portable build runs without a separately installed .NET.
+      - name: Publish
+        run: >
+          dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=true
+          -p:Version=${{ steps.v.outputs.version }} -o artifacts/publish --nologo
+
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          $v = '${{ steps.v.outputs.version }}'
+          New-Item -ItemType Directory artifacts/NodLight | Out-Null
+          Copy-Item artifacts/publish/* artifacts/NodLight -Recurse
+          Compress-Archive -Path artifacts/NodLight -DestinationPath "artifacts/NodLight-$v-win-x64-portable.zip"
+
+      - name: MSI
+        shell: pwsh
+        run: |
+          $v = '${{ steps.v.outputs.version }}'
+          dotnet build installer -c Release -p:Version=$v -p:PublishDir=artifacts/publish --nologo
+          Copy-Item installer/bin/Release/NodLight.msi "artifacts/NodLight-$v-win-x64.msi"
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Set-Location artifacts
+          Get-FileHash NodLight-*.msi, NodLight-*.zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NodLight-${{ steps.v.outputs.version }}
+          path: |
+            artifacts/NodLight-*.msi
+            artifacts/NodLight-*.zip
+            artifacts/SHA256SUMS.txt
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            (Get-ChildItem artifacts/NodLight-*.msi, artifacts/NodLight-*.zip, artifacts/SHA256SUMS.txt).FullName `
+            --title "NodLight ${{ steps.v.outputs.version }}" --generate-notes
