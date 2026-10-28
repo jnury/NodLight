@@ -57,6 +57,9 @@ public partial class App : Application
         Trace.AutoFlush = true;
         Trace.Listeners.Add(new FileTraceListener(Path.Combine(Setup.Paths.InstallDir, "deck.log"), LogMaxBytes));
 
+        var version = Environment.ProcessPath is { } path ? FileVersionInfo.GetVersionInfo(path).ProductVersion : null;
+        Trace.WriteLine($"NodLight {version ?? "?"} started (pid {Environment.ProcessId}) from {AppContext.BaseDirectory}");
+
         // Backstop for anything the guarded paths miss: an always-on-top strip should not vanish over one bad event.
         DispatcherUnhandledException += (_, args) =>
         {
@@ -109,6 +112,7 @@ public partial class App : Application
                 return SessionDiscovery.Find(tree.All(), tree);
             },
             Win32ProcessTree.CurrentDirectoryOf);
+        Trace.WriteLine($"NodLight: found {deck.Cards.Count} running session(s) at start.");
 
         void MeasureResources()
         {
@@ -184,6 +188,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Trace.WriteLine("NodLight: exiting.");
         commands?.Cancel();
         timer?.Stop();
         resourceTimer?.Stop();

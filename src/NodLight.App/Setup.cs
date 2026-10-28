@@ -146,6 +146,9 @@ public static class Setup
 
     static void Show(SetupResult result, string success)
     {
+        foreach (var o in result.Outcomes)
+            Trace.WriteLine($"NodLight: setup {o.Status}: {o.Path}{(o.Detail is null ? "" : " (" + o.Detail + ")")}");
+
         if (result.Ok)
         {
             MessageBox.Show(success, "NodLight", MessageBoxButton.OK, MessageBoxImage.Information);
