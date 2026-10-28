@@ -33,20 +33,40 @@ A nod is the small signal a colleague gives you across the room: "your turn", "g
 
 ## Install
 
-Grab the latest build from the [Releases page](https://github.com/jnury/NodLight/releases). You need Windows 11, Alacritty and the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
+You need Windows 11, Alacritty and the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64). Pick one of four ways:
 
-| File | When to use it |
+| Method | What you get |
 |---|---|
-| `NodLight-<version>-win-x64.msi` | The installer. Adds a Start menu entry and an entry in Windows Settings, under Apps. |
-| `NodLight-<version>-win-x64-portable.zip` | Unzip anywhere and run `NodLight.exe`. Nothing else to install. |
+| [winget](#winget) | The installer, for you only. Brings the .NET runtime if it is missing. |
+| [Chocolatey](#chocolatey) | The installer, for every user of the computer. Brings the .NET runtime if it is missing. |
+| [MSI from GitHub](#the-installer) | `NodLight-<version>-win-x64.msi` from the [Releases page](https://github.com/jnury/NodLight/releases). Adds a Start menu entry and an entry in Windows Settings, under Apps. |
+| [Portable zip from GitHub](#portable-zip) | `NodLight-<version>-win-x64-portable.zip` from the [Releases page](https://github.com/jnury/NodLight/releases). Unzip anywhere and run `NodLight.exe`. Nothing else to install. |
 
-The downloads are small (a couple of megabytes) because they don't carry .NET with them. If you don't have the runtime, install it with:
+The packages are small (a couple of megabytes) because they don't carry .NET with them. winget and Chocolatey install the runtime for you. With the GitHub downloads, install it yourself if you don't have it:
 
 ```powershell
 winget install Microsoft.DotNet.DesktopRuntime.10
 ```
 
-The MSI checks for the runtime before it installs anything and tells you where to get it if it is missing. With the zip, `NodLight.exe` shows Windows' own "install .NET" prompt on first start.
+### winget
+
+```powershell
+winget install JulienNury.NodLight
+```
+
+This installs for you only, like the MSI's default. Add `--scope machine` to install for everyone. Update with `winget upgrade JulienNury.NodLight`.
+
+### Chocolatey
+
+From an administrator terminal:
+
+```powershell
+choco install nodlight
+```
+
+This installs for every user, under `C:\Program Files\NodLight`. Update with `choco upgrade nodlight`.
+
+Neither package manager starts NodLight after installing it: start it from the Start menu.
 
 ### The installer
 
@@ -58,17 +78,27 @@ Setup asks who the install is for:
 For a silent install, the default is "just for me". Pass `ALLUSERS=1` for everyone:
 
 ```powershell
-msiexec /i NodLight-1.0.0-win-x64.msi /qn
-msiexec /i NodLight-1.0.0-win-x64.msi /qn ALLUSERS=1
+msiexec /i NodLight-1.0.2-win-x64.msi /qn
+msiexec /i NodLight-1.0.2-win-x64.msi /qn ALLUSERS=1
 ```
 
-**Updating:** run a newer MSI. Setup closes a running NodLight, replaces the files and offers a "Start NodLight" box on its last page, ticked by default. Your hooks and settings stay as they are, and the strip refreshes its hook helper the next time it starts. To update the portable zip, quit NodLight and unzip over the old folder.
+The MSI checks for the .NET runtime before it installs anything and tells you where to get it if it is missing.
+
+**Updating:** run a newer MSI. Setup closes a running NodLight, replaces the files and offers a "Start NodLight" box on its last page, ticked by default. Your hooks and settings stay as they are, and the strip refreshes its hook helper the next time it starts.
 
 If setup misbehaves, run it with a log and read `install.log`:
 
 ```powershell
-msiexec /i NodLight-1.0.0-win-x64.msi /l*v install.log
+msiexec /i NodLight-1.0.2-win-x64.msi /l*v install.log
 ```
+
+### Portable zip
+
+Unzip anywhere and run `NodLight.exe`. If the .NET runtime is missing, it shows Windows' own "install .NET" prompt on first start. To update, quit NodLight and unzip over the old folder.
+
+### Mixing methods
+
+Stick to one method per computer. A "just for me" install (winget, or the MSI's default) and a "for everyone" install (Chocolatey, or the MSI with `ALLUSERS=1`) don't replace each other: you would end up with two copies. Uninstall one before switching.
 
 ## First run
 
@@ -98,7 +128,11 @@ The strip keeps a log at `%LOCALAPPDATA%\NodLight\deck.log`: one line when it st
 ### Uninstall
 
 1. Right-click the taskbar button and choose **Remove hooks**. This removes only NodLight's entries.
-2. Uninstall from Windows Settings (MSI; setup closes a running NodLight first), or delete the folder (portable).
+2. Uninstall the way you installed. The first three close a running NodLight first; quit it yourself before deleting the portable folder.
+   - winget: `winget uninstall JulienNury.NodLight`
+   - Chocolatey: `choco uninstall nodlight`, from an administrator terminal
+   - MSI: from Windows Settings, under Apps
+   - Portable zip: delete the folder
 3. Delete `%LOCALAPPDATA%\NodLight`.
 
 ## How it works
