@@ -111,7 +111,7 @@ public sealed class HookInstallerTests : IDisposable
 
     [Theory]
     [InlineData(@"C:\Apps\NodLight\nodlight-hook.exe", "C:/Apps/NodLight/nodlight-hook.exe claude Stop")]
-    [InlineData(@"C:\Users\Jnury\AppData\Local\NodLight\nodlight-hook.exe",
+    [InlineData(@"C:\Users\Alex\AppData\Local\NodLight\nodlight-hook.exe",
         "C:/Users/Alex/AppData/Local/NodLight/nodlight-hook.exe claude Stop")]
     [InlineData(@"D:\my-tools\Nod_Light.v2\nodlight-hook.exe", "D:/my-tools/Nod_Light.v2/nodlight-hook.exe claude Stop")]
     public void Command_is_unquoted_for_a_plain_path(string helper, string expected) =>
