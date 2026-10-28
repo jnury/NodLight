@@ -1,24 +1,48 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
+  <!--
+    One package, two install modes (Microsoft's "single package authoring" for dual-purpose packages):
+      - just for me: per user, no admin rights, files under %LocalAppData%\Programs\NodLight
+      - everyone:    per machine, needs admin rights, files under %ProgramFiles%\NodLight
+    Scope="perUserOrMachine" authors ALLUSERS=2 and MSIINSTALLPERUSER=1, so the default is per user. The setup dialog
+    lets the user choose, and so does the command line:
+      msiexec /i NodLight.msi                                     (just for me, the default)
+      msiexec /i NodLight.msi ALLUSERS=1                          (everyone; elevates)
+    Windows Installer redirects the folder and registry roots below to the chosen context.
+  -->
   <Package Name="NodLight"
            Manufacturer="Julien Nury"
            Version="$(var.Version)"
            UpgradeCode="6B4F2C1E-3A57-4D8B-9E0C-5F1D7A92B3C4"
-           Scope="perUser"
+           Scope="perUserOrMachine"
            Compressed="yes">
 
+    <!-- A newer MSI replaces an older install (the ProductCode changes per build; the UpgradeCode ties them together). -->
     <MajorUpgrade DowngradeErrorMessage="A newer version of NodLight is already installed." />
     <MediaTemplate EmbedCab="yes" />
+
+    <!--
+      Updates and removal close a running NodLight first (a WM_CLOSE to its windows, which ends the app), before Windows
+      Installer checks for files in use. This also works for silent installs. The app keeps no unsaved state, so if it
+      has not exited after the timeout it is ended.
+    -->
+    <util:CloseApplication Id="CloseNodLight" Target="NodLight.exe" CloseMessage="yes" RebootPrompt="no"
+                           TerminateProcess="0" Timeout="5" />
+
+    <!-- Offered on the last page of a fresh install or update: starts NodLight as the user who ran setup. -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Start NodLight" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <CustomAction Id="LaunchApplication" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]NodLight.exe&quot;"
+                  Return="asyncNoWait" />
 
     <Icon Id="AppIcon" SourceFile="..\src\NodLight.App\app.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/jnury/NodLight" />
 
-    <!-- %LocalAppData%\Programs\NodLight: where per-user installers live, no elevation needed. -->
-    <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="ProgramsFolder" Name="Programs">
-        <Directory Id="INSTALLFOLDER" Name="NodLight" />
-      </Directory>
+    <!-- ProgramFiles6432Folder is %ProgramFiles% per machine and %LocalAppData%\Programs per user. -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="NodLight" />
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
@@ -28,7 +52,8 @@
                   Description="Which agent session is waiting for you?"
                   Target="[INSTALLFOLDER]NodLight.exe"
                   WorkingDirectory="INSTALLFOLDER" />
-        <RegistryValue Root="HKCU" Key="Software\Julien Nury\NodLight" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+        <!-- HKMU is HKCU for a per-user install and HKLM for a per-machine one. -->
+        <RegistryValue Root="HKMU" Key="Software\Julien Nury\NodLight" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </StandardDirectory>
 
@@ -36,6 +61,89 @@
       <ComponentGroupRef Id="AppFiles" />
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
+
+    <!--
+      Setup dialog (Microsoft's single-package-authoring pattern): the user picks the install context, the choice sets
+      ALLUSERS / MSIINSTALLPERUSER, and INSTALLFOLDER is set to match because Windows Installer resolves it before this
+      dialog runs. Silent installs skip the dialog and use the per-user default unless the properties are passed.
+      There is no license page: the project has none to show.
+    -->
+    <UI Id="NodLightUI">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="CancelDlg" />
+      <DialogRef Id="WaitForCostingDlg" />
+      <DialogRef Id="OutOfDiskDlg" />
+      <DialogRef Id="OutOfRbDiskDlg" />
+
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed AND NOT REMOVE" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+
+      <Dialog Id="ScopeDlg" Width="370" Height="270" Title="[ProductName] Setup">
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="no" Text="WixUI_Bmp_Dialog" />
+        <Control Id="Title" Type="Text" X="130" Y="10" Width="225" Height="30" Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Bigger}Install [ProductName]" />
+        <Control Id="Intro" Type="Text" X="130" Y="48" Width="225" Height="30" Transparent="yes" NoPrefix="yes"
+                 Text="Choose who should be able to use [ProductName] on this computer." />
+        <Control Id="UserTitle" Type="Text" X="130" Y="92" Width="225" Height="12" Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}Just for me" />
+        <Control Id="UserText" Type="Text" X="130" Y="106" Width="225" Height="36" Transparent="yes" NoPrefix="yes"
+                 Text="Installs into your user profile. No administrator rights needed." />
+        <Control Id="MachineTitle" Type="Text" X="130" Y="150" Width="225" Height="12" Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}For everyone" />
+        <Control Id="MachineText" Type="Text" X="130" Y="164" Width="225" Height="36" Transparent="yes" NoPrefix="yes"
+                 Text="Installs into Program Files for every user of this computer. Needs administrator rights." />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+
+        <Control Id="InstallPerUser" Type="PushButton" X="54" Y="243" Width="120" Height="17" Default="yes"
+                 Text="Install just for &amp;me">
+          <Publish Property="ALLUSERS" Value="2" Order="1" />
+          <Publish Property="MSIINSTALLPERUSER" Value="1" Order="2" />
+          <Publish Property="INSTALLFOLDER" Value="[LocalAppDataFolder]Programs\NodLight\" Order="3" />
+          <Publish Event="SpawnWaitDialog" Value="WaitForCostingDlg" Condition="1 OR CostingComplete = 1" Order="4" />
+          <Publish Event="EndDialog" Value="Return" Condition="OutOfDiskSpace &lt;&gt; 1" Order="5" />
+          <Publish Event="SpawnDialog" Value="OutOfRbDiskDlg" Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND (PROMPTROLLBACKCOST=&quot;P&quot; OR NOT PROMPTROLLBACKCOST)" Order="6" />
+          <Publish Event="EndDialog" Value="Return" Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND PROMPTROLLBACKCOST=&quot;D&quot;" Order="7" />
+          <Publish Event="EnableRollback" Value="False" Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND PROMPTROLLBACKCOST=&quot;D&quot;" Order="8" />
+          <Publish Event="SpawnDialog" Value="OutOfDiskDlg" Condition="(OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 1) OR (OutOfDiskSpace = 1 AND PROMPTROLLBACKCOST=&quot;F&quot;)" Order="9" />
+        </Control>
+
+        <!-- The shield marks the step that asks Windows for administrator rights. -->
+        <Control Id="InstallPerMachine" Type="PushButton" X="178" Y="243" Width="120" Height="17" ElevationShield="yes"
+                 Text="Install for &amp;everyone">
+          <Publish Property="ALLUSERS" Value="1" Order="1" />
+          <Publish Property="MSIINSTALLPERUSER" Value="{}" Order="2" />
+          <Publish Property="INSTALLFOLDER" Value="[ProgramFiles64Folder]NodLight\" Order="3" />
+          <Publish Event="SpawnWaitDialog" Value="WaitForCostingDlg" Condition="1 OR CostingComplete = 1" Order="4" />
+          <Publish Event="EndDialog" Value="Return" Condition="OutOfDiskSpace &lt;&gt; 1" Order="5" />
+          <Publish Event="SpawnDialog" Value="OutOfRbDiskDlg" Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND (PROMPTROLLBACKCOST=&quot;P&quot; OR NOT PROMPTROLLBACKCOST)" Order="6" />
+          <Publish Event="EndDialog" Value="Return" Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND PROMPTROLLBACKCOST=&quot;D&quot;" Order="7" />
+          <Publish Event="EnableRollback" Value="False" Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND PROMPTROLLBACKCOST=&quot;D&quot;" Order="8" />
+          <Publish Event="SpawnDialog" Value="OutOfDiskDlg" Condition="(OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 1) OR (OutOfDiskSpace = 1 AND PROMPTROLLBACKCOST=&quot;F&quot;)" Order="9" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <InstallUISequence>
+        <Show Dialog="ScopeDlg" Before="ProgressDlg" Condition="NOT Installed" />
+      </InstallUISequence>
+
+      <UIRef Id="WixUI_Common" />
+    </UI>
 
   </Package>
 

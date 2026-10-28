@@ -12,8 +12,9 @@
     <InstallerPlatform>x64</InstallerPlatform>
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\artifacts\publish</PublishDir>
     <DefineConstants>$(DefineConstants);Version=$(Version);PublishDir=$([System.IO.Path]::GetFullPath('$(PublishDir)'))</DefineConstants>
-    <!-- Harvested file components in a per-user package have no HKCU key path; the profile folder makes that fine. -->
-    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+    <!-- Dual-purpose package: components are per-user or per-machine depending on the chosen context, so the per-user
+         checks that assume one fixed context (ICE38, ICE57, ICE64, ICE91) do not apply. ICE105 still checks the package. -->
+    <SuppressIces>ICE38;ICE57;ICE64;ICE91</SuppressIces>
   </PropertyGroup>
 
   <Target Name="CheckPublishDir" BeforeTargets="BeforeBuild">
@@ -23,6 +24,8 @@
 
   <ItemGroup>
     <PackageReference Include="WixToolset.Heat" Version="5.0.2" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
   </ItemGroup>
 
   <ItemGroup>
