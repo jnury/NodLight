@@ -51,10 +51,10 @@ winget install Microsoft.DotNet.DesktopRuntime.10
 ### winget
 
 ```powershell
-winget install JulienNury.NodLight
+winget install nodlight
 ```
 
-This installs for you only, like the MSI's default. Add `--scope machine` to install for everyone. Update with `winget upgrade JulienNury.NodLight`.
+This installs for you only, like the MSI's default. Add `--scope machine` to install for everyone. Update with `winget upgrade nodlight`. In scripts, use the full package ID, which never matches anything else: `winget install --id JulienNury.NodLight --exact`.
 
 ### Chocolatey
 
@@ -129,7 +129,7 @@ The strip keeps a log at `%LOCALAPPDATA%\NodLight\deck.log`: one line when it st
 
 1. Right-click the taskbar button and choose **Remove hooks**. This removes only NodLight's entries.
 2. Uninstall the way you installed. The first three close a running NodLight first; quit it yourself before deleting the portable folder.
-   - winget: `winget uninstall JulienNury.NodLight`
+   - winget: `winget uninstall nodlight`
    - Chocolatey: `choco uninstall nodlight`, from an administrator terminal
    - MSI: from Windows Settings, under Apps
    - Portable zip: delete the folder
