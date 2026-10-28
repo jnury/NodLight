@@ -1,8 +1,9 @@
 name: Release
 
 # Tag a version (git tag v1.2.3 && git push --tags) to build the MSI and the portable zip, attach them to a
-# GitHub release and push the Chocolatey package (needs the CHOCOLATEY_API_KEY secret). "Run workflow" from the
-# Actions tab builds the same files, the .nupkg included, as a downloadable artifact without publishing anything.
+# GitHub release, push the Chocolatey package (needs the CHOCOLATEY_API_KEY secret) and open the winget-pkgs pull
+# request (needs WINGET_TOKEN, a classic token with the public_repo scope). "Run workflow" from the Actions tab builds
+# the same files, the .nupkg included, as a downloadable artifact without publishing anything.
 on:
   push:
     tags: ['v*']
@@ -126,3 +127,31 @@ jobs:
           }
           choco push "artifacts/nodlight.${{ steps.v.outputs.version }}.nupkg" --source https://push.chocolatey.org/ --api-key $env:CHOCOLATEY_API_KEY
           if ($LASTEXITCODE) { throw "choco push failed ($LASTEXITCODE)" }
+
+      # Opens the winget-pkgs PR for this version from the token owner's fork. wingetcreate updates an existing package
+      # from its latest manifest there, so it can only run once the first version has been merged.
+      - name: Publish to winget
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if (-not $env:WINGET_TOKEN) {
+            Write-Output '::warning::WINGET_TOKEN is not set; no winget-pkgs pull request was opened.'
+            return
+          }
+          $listed = Invoke-WebRequest https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/j/JulienNury/NodLight `
+            -SkipHttpErrorCheck -Headers @{ Authorization = "Bearer $env:WINGET_TOKEN" }
+          if ($listed.StatusCode -eq 404) {
+            Write-Output '::warning::JulienNury.NodLight is not in winget-pkgs yet; submit its first version by hand.'
+            return
+          }
+          $v = '${{ steps.v.outputs.version }}'
+          $url = "https://github.com/jnury/NodLight/releases/download/v$v/NodLight-$v-win-x64.msi"
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          # The same MSI backs both installer entries: per user by default, per machine with ALLUSERS=1.
+          ./wingetcreate.exe update JulienNury.NodLight --version $v --urls "$url|x64|user" "$url|x64|machine" `
+            --release-notes-url "https://github.com/jnury/NodLight/releases/tag/v$v" `
+            --release-date (Get-Date -Format 'yyyy-MM-dd') `
+            --prtitle "Update: JulienNury.NodLight to $v" --submit --no-open --token $env:WINGET_TOKEN
+          if ($LASTEXITCODE) { throw "wingetcreate failed ($LASTEXITCODE)" }
