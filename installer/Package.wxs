@@ -66,7 +66,7 @@
       Setup dialog (Microsoft's single-package-authoring pattern): the user picks the install context, the choice sets
       ALLUSERS / MSIINSTALLPERUSER, and INSTALLFOLDER is set to match because Windows Installer resolves it before this
       dialog runs. Silent installs skip the dialog and use the per-user default unless the properties are passed.
-      There is no license page: the project has none to show.
+      There is no license page: the MIT license needs no acceptance, and its text is installed next to the app.
     -->
     <UI Id="NodLightUI">
       <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />

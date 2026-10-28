@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
 
   <!-- Shared metadata. Releases override the version: dotnet build -p:Version=1.2.3 (the release workflow does). -->
   <PropertyGroup>
@@ -7,6 +7,7 @@
     <Product>NodLight</Product>
     <Copyright>Copyright (c) Julien Nury</Copyright>
     <RepositoryUrl>https://github.com/jnury/NodLight</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
 </Project>

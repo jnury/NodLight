@@ -28,6 +28,8 @@
   <!-- Icons of the taskbar menu entries: the jump list loads them by file path, so they sit next to the exe. -->
   <ItemGroup>
     <Content Include="icons\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The MIT notice travels with every copy: it lands next to NodLight.exe, in the portable zip and in the MSI. -->
+    <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
