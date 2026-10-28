@@ -1,8 +1,8 @@
 name: Release
 
-# Tag a version (git tag v1.2.3 && git push --tags) to build the MSI and the portable zip and attach them to a
-# GitHub release. "Run workflow" from the Actions tab builds the same files as a downloadable artifact without
-# publishing anything.
+# Tag a version (git tag v1.2.3 && git push --tags) to build the MSI and the portable zip, attach them to a
+# GitHub release and push the Chocolatey package (needs the CHOCOLATEY_API_KEY secret). "Run workflow" from the
+# Actions tab builds the same files, the .nupkg included, as a downloadable artifact without publishing anything.
 on:
   push:
     tags: ['v*']
@@ -75,6 +75,25 @@ jobs:
             ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
             Set-Content SHA256SUMS.txt
 
+      # The Chocolatey package downloads the MSI from this release, so its version, URL and checksum are written here.
+      - name: Chocolatey package
+        shell: pwsh
+        run: |
+          $v = '${{ steps.v.outputs.version }}'
+          $hash = (Get-FileHash "artifacts/NodLight-$v-win-x64.msi" -Algorithm SHA256).Hash
+          $nuspec = 'chocolatey/nodlight.nuspec'
+          (Get-Content $nuspec -Raw) `
+            -replace '<version>[^<]+</version>', "<version>$v</version>" `
+            -replace 'releases/tag/v[^<]+', "releases/tag/v$v" |
+            Set-Content $nuspec -NoNewline
+          $install = 'chocolatey/tools/chocolateyinstall.ps1'
+          (Get-Content $install -Raw) `
+            -replace "url64bit(\s*)= '[^']+'", "url64bit`$1= 'https://github.com/jnury/NodLight/releases/download/v$v/NodLight-$v-win-x64.msi'" `
+            -replace "checksum64(\s*)= '[^']+'", "checksum64`$1= '$hash'" |
+            Set-Content $install -NoNewline
+          choco pack $nuspec --outputdirectory artifacts
+          if ($LASTEXITCODE) { throw "choco pack failed ($LASTEXITCODE)" }
+
       - uses: actions/upload-artifact@v5
         with:
           name: NodLight-${{ steps.v.outputs.version }}
@@ -82,6 +101,7 @@ jobs:
             artifacts/NodLight-*.msi
             artifacts/NodLight-*.zip
             artifacts/SHA256SUMS.txt
+            artifacts/nodlight.*.nupkg
 
       - name: Publish release
         if: github.ref_type == 'tag'
@@ -92,3 +112,17 @@ jobs:
           gh release create $env:GITHUB_REF_NAME `
             (Get-ChildItem artifacts/NodLight-*.msi, artifacts/NodLight-*.zip, artifacts/SHA256SUMS.txt).FullName `
             --title "NodLight ${{ steps.v.outputs.version }}" --generate-notes
+
+      # After the release: Chocolatey's moderation downloads the MSI from it. Each version then waits for moderation.
+      - name: Publish to Chocolatey
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          if (-not $env:CHOCOLATEY_API_KEY) {
+            Write-Output '::warning::CHOCOLATEY_API_KEY is not set; the Chocolatey package was built but not pushed.'
+            return
+          }
+          choco push "artifacts/nodlight.${{ steps.v.outputs.version }}.nupkg" --source https://push.chocolatey.org/ --api-key $env:CHOCOLATEY_API_KEY
+          if ($LASTEXITCODE) { throw "choco push failed ($LASTEXITCODE)" }
