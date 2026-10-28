@@ -21,7 +21,7 @@ public static class StatusReducer
                 => (SessionStatus.Waiting, WaitKind.Permission, e.Detail),
             "Notification" => null,
             "PermissionRequest" => (SessionStatus.Waiting, WaitKind.Permission, e.Detail),
-            "Stop" => (SessionStatus.Waiting, WaitKind.YourTurn, "Your turn"),
+            "Stop" => (SessionStatus.Waiting, WaitKind.YourTurn, null),
             _ => null,
         };
 
@@ -53,6 +53,15 @@ public static class StatusReducer
     public static Card OnForeground(Card c, DateTimeOffset now) =>
         c is { Status: SessionStatus.Waiting, Wait: WaitKind.YourTurn }
             ? c with { Status = SessionStatus.Idle, Wait = WaitKind.None, Detail = null, Since = now }
+            : c;
+
+    /// <summary>
+    /// The window title shows the agent's working spinner while the card is Idle (no hook said so): it is working.
+    /// A Waiting card is left alone: a permission prompt really is blocking, and a finished turn is read by the user.
+    /// </summary>
+    public static Card OnTitleWorking(Card c, DateTimeOffset now) =>
+        c.Status == SessionStatus.Idle
+            ? c with { Status = SessionStatus.Working, Wait = WaitKind.None, Detail = null, Since = now }
             : c;
 
     /// <summary>The user interrupted the agent: back to idle.</summary>

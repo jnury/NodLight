@@ -62,7 +62,26 @@ public sealed class HookInstallerTests : IDisposable
     public void Merge_null_empty_or_whitespace_is_new_config(string? existing)
     {
         var root = Parse(HookInstaller.Merge(existing, AgentKind.Claude, Helper));
-        Assert.Equal(7, root["hooks"]!.AsObject().Count);
+        Assert.Equal(HookInstaller.ClaudeEvents.Length, root["hooks"]!.AsObject().Count);
+    }
+
+    [Fact]
+    public void Merge_removes_nodlight_entries_for_retired_events_and_keeps_the_users_own()
+    {
+        const string existing = """
+            { "hooks": {
+                "SubagentStart": [
+                  { "hooks": [ { "type": "command", "command": "C:/Apps/NodLight/nodlight-hook.exe claude SubagentStart" } ] } ],
+                "SubagentStop": [
+                  { "hooks": [ { "type": "command", "command": "C:/Apps/NodLight/nodlight-hook.exe claude SubagentStop" },
+                                { "type": "command", "command": "echo mine" } ] } ] } }
+            """;
+
+        var hooks = Parse(HookInstaller.Merge(existing, AgentKind.Claude, Helper))["hooks"]!.AsObject();
+
+        Assert.False(hooks.ContainsKey("SubagentStart"));
+        var remaining = hooks["SubagentStop"]![0]!["hooks"]!.AsArray();
+        Assert.Equal("echo mine", (string)Assert.Single(remaining)!["command"]!);
     }
 
     [Fact]
@@ -93,7 +112,7 @@ public sealed class HookInstallerTests : IDisposable
     [Theory]
     [InlineData(@"C:\Apps\NodLight\nodlight-hook.exe", "C:/Apps/NodLight/nodlight-hook.exe claude Stop")]
     [InlineData(@"C:\Users\Jnury\AppData\Local\NodLight\nodlight-hook.exe",
-        "C:/Users/Jnury/AppData/Local/NodLight/nodlight-hook.exe claude Stop")]
+        "C:/Users/Alex/AppData/Local/NodLight/nodlight-hook.exe claude Stop")]
     [InlineData(@"D:\my-tools\Nod_Light.v2\nodlight-hook.exe", "D:/my-tools/Nod_Light.v2/nodlight-hook.exe claude Stop")]
     public void Command_is_unquoted_for_a_plain_path(string helper, string expected) =>
         Assert.Equal(expected, HookInstaller.CommandFor(helper, AgentKind.Claude, "Stop"));

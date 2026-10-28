@@ -15,6 +15,25 @@ public class StatusReducerTests
         new(hwnd, AgentKind.Claude, session, null, null, s, w, detail, t0);
 
     [Fact]
+    public void Title_spinner_turns_an_idle_card_into_working()
+    {
+        var later = t0.AddMinutes(3);
+        var c = StatusReducer.OnTitleWorking(CardOf(SessionStatus.Idle), later);
+
+        Assert.Equal((SessionStatus.Working, WaitKind.None, later), (c.Status, c.Wait, c.Since));
+    }
+
+    [Theory]
+    [InlineData(SessionStatus.Working, WaitKind.None)]
+    [InlineData(SessionStatus.Waiting, WaitKind.Permission)]
+    [InlineData(SessionStatus.Waiting, WaitKind.YourTurn)]
+    public void Title_spinner_leaves_other_statuses_alone(SessionStatus status, WaitKind wait)
+    {
+        var card = CardOf(status, wait, "x");
+        Assert.Same(card, StatusReducer.OnTitleWorking(card, t0.AddMinutes(1)));
+    }
+
+    [Fact]
     public void SessionStart_creates_idle_card() =>
         Assert.Equal(SessionStatus.Idle, StatusReducer.Apply(null, Ev("SessionStart"), 42)!.Status);
 
@@ -41,7 +60,7 @@ public class StatusReducerTests
     public void Stop_waits_your_turn()
     {
         var c = StatusReducer.Apply(null, Ev("Stop"), 42)!;
-        Assert.Equal((SessionStatus.Waiting, WaitKind.YourTurn, "Your turn"), (c.Status, c.Wait, c.Detail));
+        Assert.Equal((SessionStatus.Waiting, WaitKind.YourTurn, (string?)null), (c.Status, c.Wait, c.Detail));
     }
 
     [Fact]
@@ -120,7 +139,7 @@ public class StatusReducerTests
     public void Foreground_turns_your_turn_into_idle()
     {
         var now = t0.AddMinutes(5);
-        var c = StatusReducer.OnForeground(CardOf(SessionStatus.Waiting, WaitKind.YourTurn, "Your turn"), now);
+        var c = StatusReducer.OnForeground(CardOf(SessionStatus.Waiting, WaitKind.YourTurn, null), now);
         Assert.Equal((SessionStatus.Idle, WaitKind.None, now), (c.Status, c.Wait, c.Since));
     }
 

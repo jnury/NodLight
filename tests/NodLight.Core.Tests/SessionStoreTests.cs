@@ -24,6 +24,30 @@ public class SessionStoreTests
     }
 
     [Fact]
+    public void Discover_adds_an_idle_card_without_overwriting_an_existing_one()
+    {
+        var s = new SessionStore();
+        s.Discover(1, AgentKind.Codex, t0);
+        var card = Assert.Single(s.Cards);
+        Assert.Equal((AgentKind.Codex, SessionStatus.Idle, WaitKind.None), (card.Agent, card.Status, card.Wait));
+
+        s.Apply(Ev("Stop", 1), 1);
+        s.Discover(1, AgentKind.Claude, t0.AddMinutes(2));
+        Assert.Equal(SessionStatus.Waiting, Assert.Single(s.Cards).Status);
+    }
+
+    [Fact]
+    public void Hook_event_takes_over_a_discovered_card()
+    {
+        var s = new SessionStore();
+        s.Discover(1, AgentKind.Claude, t0);
+        s.Apply(Ev("PreToolUse", 1) with { SessionId = "a", Cwd = @"C:\demo" }, 1);
+
+        var card = Assert.Single(s.Cards);
+        Assert.Equal((SessionStatus.Working, "a", @"C:\demo"), (card.Status, card.SessionId, card.Cwd));
+    }
+
+    [Fact]
     public void WindowClosed_removes_card()
     {
         var s = new SessionStore();

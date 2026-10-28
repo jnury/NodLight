@@ -1,6 +1,5 @@
 using System.Text;
 using NodLight.Core;
-using NodLight.Hook;
 
 // Hook helper: nodlight-hook <claude|codex> <EventName>, JSON payload on stdin.
 // Must never fail, block, or write output (agents treat hook output as meaningful).

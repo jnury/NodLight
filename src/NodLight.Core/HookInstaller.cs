@@ -15,6 +15,9 @@ public static class HookInstaller
     public static readonly string[] ClaudeEvents =
         ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop", "SessionEnd"];
 
+    // Installed by an earlier build; Merge removes NodLight's entries for them.
+    static readonly string[] RetiredEvents = ["SubagentStart", "SubagentStop"];
+
     public static readonly string[] CodexEvents =
         ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"];
 
@@ -69,7 +72,31 @@ public static class HookInstaller
             }
         }
 
+        // Events an earlier build installed and this one no longer uses.
+        foreach (var ev in RetiredEvents) RemoveEntries(hooks, ev);
+
         return root.ToJsonString(Output);
+    }
+
+    // Removes NodLight's entries from one event. Drops a group only if it emptied it and the event array only if it
+    // emptied that, never the user's own. Returns whether anything was removed.
+    static bool RemoveEntries(JsonObject hooks, string ev)
+    {
+        if (hooks[ev] is not JsonArray array) return false; // not ours: never throw on unrelated values
+        var removed = false;
+        for (var i = array.Count - 1; i >= 0; i--)
+        {
+            if (array[i] is not JsonObject group || group["hooks"] is not JsonArray inner) continue;
+            for (var j = inner.Count - 1; j >= 0; j--)
+            {
+                if (!IsNodLightEntry(inner[j])) continue;
+                inner.RemoveAt(j);
+                removed = true;
+                if (inner.Count == 0) array.RemoveAt(i);
+            }
+        }
+        if (removed && array.Count == 0) hooks.Remove(ev);
+        return removed;
     }
 
     public static string Unmerge(string existingJson)
@@ -80,24 +107,7 @@ public static class HookInstaller
 
         var changed = false;
         foreach (var ev in hooks.Select(p => p.Key).ToList())
-        {
-            if (hooks[ev] is not JsonArray array) continue; // not ours: never throw on unrelated values
-            var removed = false;
-            for (var i = array.Count - 1; i >= 0; i--)
-            {
-                if (array[i] is not JsonObject group || group["hooks"] is not JsonArray inner) continue;
-                for (var j = inner.Count - 1; j >= 0; j--)
-                {
-                    if (!IsNodLightEntry(inner[j])) continue;
-                    inner.RemoveAt(j);
-                    removed = true;
-                    if (inner.Count == 0) array.RemoveAt(i); // drop the group only if we emptied it
-                }
-            }
-            if (!removed) continue;
-            changed = true;
-            if (array.Count == 0) hooks.Remove(ev); // only drop arrays we emptied, never the user's own
-        }
+            changed |= RemoveEntries(hooks, ev);
 
         if (!changed) return existingJson;
         if (hooks.Count == 0) root.Remove("hooks");

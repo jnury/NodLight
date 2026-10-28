@@ -28,6 +28,16 @@ public sealed class SessionStore
         Set(hwnd, current, StatusReducer.Apply(current, e, hwnd));
     }
 
+    /// <summary>
+    /// Adds an Idle card for a session found running at startup, before any hook event. A window that already has a
+    /// card is left alone: hook events are the more accurate source.
+    /// </summary>
+    public void Discover(long hwnd, AgentKind agent, DateTimeOffset now, string? cwd = null)
+    {
+        if (cards.ContainsKey(hwnd)) return;
+        Set(hwnd, null, new Card(hwnd, agent, null, cwd, null, SessionStatus.Idle, WaitKind.None, null, now));
+    }
+
     public void WindowClosed(long hwnd)
     {
         if (cards.Remove(hwnd)) Changed?.Invoke();
@@ -36,6 +46,11 @@ public sealed class SessionStore
     public void Foreground(long hwnd, DateTimeOffset now)
     {
         if (cards.TryGetValue(hwnd, out var c)) Set(hwnd, c, StatusReducer.OnForeground(c, now));
+    }
+
+    public void TitleWorking(long hwnd, DateTimeOffset now)
+    {
+        if (cards.TryGetValue(hwnd, out var c)) Set(hwnd, c, StatusReducer.OnTitleWorking(c, now));
     }
 
     public void Interrupted(long hwnd, DateTimeOffset now)
