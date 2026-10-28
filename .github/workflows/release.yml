@@ -36,10 +36,10 @@ jobs:
       - name: Test
         run: dotnet test NodLight.sln -c Release --nologo -p:Version=${{ steps.v.outputs.version }}
 
-      # Self-contained, so the portable build runs without a separately installed .NET.
+      # Framework-dependent: small downloads. The MSI checks for the .NET 10 Desktop Runtime; the zip relies on the app's own start-up prompt.
       - name: Publish
         run: >
-          dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=true
+          dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=false
           -p:Version=${{ steps.v.outputs.version }} -o artifacts/publish --nologo
 
       - name: Portable zip

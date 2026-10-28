@@ -29,14 +29,20 @@ The idea comes from [ghossty-dock](https://github.com/andrewbakercloudscale/ghos
 
 ## Install
 
-Grab the latest build from the [Releases page](https://github.com/jnury/NodLight/releases). Windows 11 and Alacritty are required.
+Grab the latest build from the [Releases page](https://github.com/jnury/NodLight/releases). You need Windows 11, Alacritty and the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
 
 | File | When to use it |
 |---|---|
 | `NodLight-<version>-win-x64.msi` | The installer. Adds a Start menu entry and an entry in Windows Settings, under Apps. |
 | `NodLight-<version>-win-x64-portable.zip` | Unzip anywhere and run `NodLight.exe`. Nothing else to install. |
 
-Both include the .NET runtime, so you don't need to install it separately.
+The downloads are small (a couple of megabytes) because they don't carry .NET with them. If you don't have the runtime, install it with:
+
+```powershell
+winget install Microsoft.DotNet.DesktopRuntime.10
+```
+
+The MSI checks for the runtime before it installs anything and tells you where to get it if it is missing. With the zip, `NodLight.exe` shows Windows' own "install .NET" prompt on first start.
 
 ### The installer
 
@@ -145,7 +151,7 @@ The code is split into `NodLight.Core` (status logic, hook config merging, proce
 Pushing a tag like `v1.2.3` runs the [release workflow](.github/workflows/release.yml), which runs the tests, builds the portable zip and the MSI, and attaches both, with SHA-256 checksums, to a GitHub release. The MSI is built with WiX from `installer/`. To build it locally, publish the app first and pass the absolute path of the publish folder. Use `-t:Rebuild` when you change the version, because the installer project doesn't notice a version change on its own:
 
 ```powershell
-dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=true -o $PWD\artifacts\publish
+dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=false -o $PWD\artifacts\publish
 dotnet build installer -c Release -t:Rebuild -p:Version=1.0.0 -p:PublishDir=$PWD\artifacts\publish
 ```
 

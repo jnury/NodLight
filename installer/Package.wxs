@@ -40,6 +40,22 @@
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/jnury/NodLight" />
 
+    <!--
+      The app needs the .NET Desktop Runtime and does not bring one. A small custom action looks for it and setup stops
+      with a message if it is missing. The required major version is a property, so a test can ask for another.
+    -->
+    <Property Id="DOTNET_REQUIRED_MAJOR" Value="10" />
+    <Binary Id="CheckDotNetCA" SourceFile="$(CheckDotNet.TargetDir)CheckDotNet.CA.dll" />
+    <CustomAction Id="CheckDotNet" BinaryRef="CheckDotNetCA" DllEntry="CheckDotNetDesktopRuntime" Execute="immediate" Return="check" />
+    <InstallUISequence>
+      <Custom Action="CheckDotNet" Before="LaunchConditions" Condition="NOT Installed" />
+    </InstallUISequence>
+    <InstallExecuteSequence>
+      <Custom Action="CheckDotNet" Before="LaunchConditions" Condition="NOT Installed" />
+    </InstallExecuteSequence>
+    <Launch Condition="Installed OR DOTNET_DESKTOP_FOUND"
+            Message="[ProductName] needs the .NET [DOTNET_REQUIRED_MAJOR] Desktop Runtime (x64), which is not installed on this computer. Install it from https://dotnet.microsoft.com/download/dotnet/[DOTNET_REQUIRED_MAJOR].0 and run this setup again." />
+
     <!-- ProgramFiles6432Folder is %ProgramFiles% per machine and %LocalAppData%\Programs per user. -->
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="NodLight" />

@@ -4,7 +4,7 @@
     Per-user MSI (no admin rights): installs under %LocalAppData%\Programs\NodLight.
     It packages a published folder, so publish first:
 
-      dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=true -o artifacts/publish
+      dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=false -o artifacts/publish
       dotnet build installer -c Release -p:Version=1.2.3 -p:PublishDir=<absolute path of the publish folder>
   -->
   <PropertyGroup>
@@ -21,6 +21,10 @@
     <Error Condition="!Exists('$(PublishDir)\NodLight.exe')"
            Text="PublishDir '$(PublishDir)' has no NodLight.exe. Publish the app first and pass an absolute -p:PublishDir." />
   </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="CheckDotNet\CheckDotNet.csproj" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="WixToolset.Heat" Version="5.0.2" />

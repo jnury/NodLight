@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Install-time check for the .NET Desktop Runtime. Windows Installer cannot list installed runtime versions on its own,
+    so this tiny custom action (run by the .NET Framework that ships with Windows) reads them from the registry.
+    WixToolset.Dtf packs the result into CheckDotNet.CA.dll, which installer/Package.wxs embeds.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>CheckDotNet</AssemblyName>
+    <RootNamespace>NodLight.Installer</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Dtf.CustomAction" Version="5.0.2" />
+    <!-- Packed into the custom action by WixToolset.Dtf; it selects the .NET Framework 4.x runtime. -->
+    <Content Include="CustomAction.config" />
+  </ItemGroup>
+
+</Project>
