@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>nodlight</id>
+    <version>1.0.2</version>
+    <title>NodLight</title>
+    <authors>Julien Nury</authors>
+    <owners>jnury</owners>
+    <projectUrl>https://github.com/jnury/NodLight</projectUrl>
+    <packageSourceUrl>https://github.com/jnury/NodLight/tree/main/chocolatey</packageSourceUrl>
+    <projectSourceUrl>https://github.com/jnury/NodLight</projectSourceUrl>
+    <docsUrl>https://github.com/jnury/NodLight#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/jnury/NodLight/issues</bugTrackerUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/jnury/NodLight@main/docs/images/icon.png</iconUrl>
+    <licenseUrl>https://github.com/jnury/NodLight/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <copyright>Copyright (c) 2026 Julien Nury</copyright>
+    <tags>nodlight claude-code codex alacritty ai agents productivity foss</tags>
+    <summary>Shows which of your Claude Code and Codex sessions is waiting for you.</summary>
+    <description><![CDATA[A strip of cards on the edge of your screen that shows which of your Claude Code and Codex sessions is waiting for you. One card per Alacritty window. Click a card, land in that window.
+
+![NodLight](https://cdn.jsdelivr.net/gh/jnury/NodLight@main/docs/images/deck.png)
+
+## Features
+
+- **One card per session**: window title, a `claude` or `codex` badge, the status with how long it has been in it, and the project folder.
+- **Status at a glance**: orange with a slow blink when a session waits for you, green while it works, grey when idle.
+- **Resource use per session**: CPU, memory and disk/network I/O of everything running under that window.
+- **Click to focus**: the window comes to the front, restored if it was minimised.
+- **Taskbar button** to show or hide the strip, with a count of waiting, working and idle sessions.
+- **Follows Windows** light or dark mode and accent colour.
+
+## Notes
+
+- Needs Windows 11 and [Alacritty](https://alacritty.org/). The .NET 10 Desktop Runtime is installed as a dependency.
+- This package installs NodLight for all users, under `C:\Program Files\NodLight`.
+- On first start NodLight offers to add its hooks to Claude Code and Codex. Run `/hooks` in Codex once to trust them.
+]]></description>
+    <releaseNotes>https://github.com/jnury/NodLight/releases/tag/v1.0.2</releaseNotes>
+    <dependencies>
+      <dependency id="dotnet-10.0-desktopruntime" version="10.0.0" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
