@@ -38,9 +38,11 @@
   </ItemGroup>
 
   <!-- Publishes the Native AOT helper (nodlight-hook.exe) and copies it next to NodLight.exe. The publish is skipped when up to date.
-       Native AOT's linker discovery needs vswhere.exe on PATH; prepend the VS Installer dir (harmless when absent). -->
+       Native AOT's linker discovery needs vswhere.exe on PATH; prepend the VS Installer dir (harmless when absent).
+       The version is passed on: the helper's publish rebuilds NodLight.Core into the same bin folder this app ships it from,
+       so without it a release (-p:Version=x.y.z) would ship a Core with the default version, which the app refuses to load. -->
   <Target Name="PublishHook" Inputs="@(HookSource)" Outputs="$(HookPublishDir)\nodlight-hook.exe">
-    <Exec Command="set &quot;PATH=$(VsInstallerDir);%25PATH%25&quot; &amp;&amp; dotnet publish &quot;$(HookProject)&quot; -c $(Configuration) -o &quot;$(HookPublishDir)&quot; --nologo -v:q" />
+    <Exec Command="set &quot;PATH=$(VsInstallerDir);%25PATH%25&quot; &amp;&amp; dotnet publish &quot;$(HookProject)&quot; -c $(Configuration) -p:Version=$(Version) -o &quot;$(HookPublishDir)&quot; --nologo -v:q" />
     <Error Condition="!Exists('$(HookPublishDir)\nodlight-hook.exe')"
            Text="Could not produce nodlight-hook.exe. Native AOT publish needs the Visual Studio C++ build tools and vswhere.exe (looked in $(VsInstallerDir) and on PATH)." />
   </Target>

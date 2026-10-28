@@ -42,6 +42,15 @@ jobs:
           dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=false
           -p:Version=${{ steps.v.outputs.version }} -o artifacts/publish --nologo
 
+      # The app only loads a NodLight.Core of the exact version it was built against.
+      - name: Check assembly versions
+        shell: pwsh
+        run: |
+          $expected = [version]'${{ steps.v.outputs.version }}.0'
+          $wrong = Get-ChildItem artifacts/publish/NodLight*.dll |
+            Where-Object { [Reflection.AssemblyName]::GetAssemblyName($_.FullName).Version -ne $expected }
+          if ($wrong) { throw "Not version ${expected}: $($wrong.Name -join ', ')" }
+
       - name: Portable zip
         shell: pwsh
         run: |
