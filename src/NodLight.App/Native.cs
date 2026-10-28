@@ -15,6 +15,10 @@ internal static class Native
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
     public const int OBJID_WINDOW = 0;
     public const int DWMWA_CLOAKED = 14;
+    public const int DWMWA_FORCE_ICONIC_REPRESENTATION = 7;
+    public const int DWMWA_HAS_ICONIC_BITMAP = 10;
+    public const int WM_DWMSENDICONICTHUMBNAIL = 0x0323;
+    public const int WM_DWMSENDICONICLIVEPREVIEWBITMAP = 0x0326;
 
     public delegate bool EnumWindowsProc(nint hwnd, nint lParam);
 
@@ -81,6 +85,41 @@ internal static class Native
 
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(nint hwnd, int attribute, out int value, int size);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetIconicThumbnail(nint hwnd, nint hbitmap, uint flags);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetIconicLivePreviewBitmap(nint hwnd, nint hbitmap, nint clientOffset, uint flags);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmInvalidateIconicBitmaps(nint hwnd);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BitmapInfoHeader
+    {
+        public uint Size;
+        public int Width;
+        public int Height;
+        public ushort Planes;
+        public ushort BitCount;
+        public uint Compression;
+        public uint SizeImage;
+        public int XPelsPerMeter;
+        public int YPelsPerMeter;
+        public uint ColorsUsed;
+        public uint ColorsImportant;
+    }
+
+    [DllImport("gdi32.dll")]
+    public static extern nint CreateDIBSection(nint hdc, ref BitmapInfoHeader info, uint usage, out nint bits, nint section, uint offset);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DeleteObject(nint handle);
 
     // The *Ptr variants only exist in 64-bit user32; 32-bit processes use the plain ones.
     public static long GetExStyle(nint hwnd) =>

@@ -1,0 +1,38 @@
+<UserControl x:Class="NodLight.App.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="200" Height="125"
+             FontFamily="Segoe UI"
+             UseLayoutRounding="True"
+             TextOptions.TextFormattingMode="Display">
+    <!-- Designed at the usual thumbnail size so nothing is scaled down: a big count and three big coloured numbers. -->
+    <Border Background="{DynamicResource SurfaceBrush}" Padding="8,6,8,8">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="{Binding Sessions}" Foreground="{DynamicResource TextBrush}"
+                           FontSize="52" FontWeight="Bold" HorizontalAlignment="Center" LineHeight="56" LineStackingStrategy="BlockLineHeight" />
+                <TextBlock Text="{Binding SessionsLabel}" Foreground="{DynamicResource TextSecondaryBrush}"
+                           FontSize="15" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Waiting}" Foreground="{DynamicResource WaitingBrush}"
+                           FontSize="30" FontWeight="Bold" HorizontalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Working}" Foreground="{DynamicResource WorkingBrush}"
+                           FontSize="30" FontWeight="Bold" HorizontalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding Idle}" Foreground="{DynamicResource IdleBrush}"
+                           FontSize="30" FontWeight="Bold" HorizontalAlignment="Center" />
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

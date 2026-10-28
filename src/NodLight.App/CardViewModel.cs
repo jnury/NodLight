@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Windows.Media;
 using NodLight.Core;
 
 namespace NodLight.App;
@@ -9,14 +8,6 @@ namespace NodLight.App;
 /// <summary>One card on the strip: a <see cref="Card"/> plus the live window title, formatted for display.</summary>
 public sealed class CardViewModel(long hwnd) : INotifyPropertyChanged
 {
-    static readonly Brush WaitingBrush = Frozen(0xFA, 0xB3, 0x87);
-    static readonly Brush WorkingBrush = Frozen(0xA6, 0xE3, 0xA1);
-    static readonly Brush IdleBrush = Frozen(0x6C, 0x70, 0x86);
-    static readonly Brush CardBackground = Frozen(0x23, 0x23, 0x34);
-    static readonly Brush WaitingBackground = Frozen(0x3A, 0x2C, 0x22);
-    static readonly Brush TitleText = Frozen(0xDD, 0xDD, 0xDD);
-    static readonly Brush IdleTitleText = Frozen(0x99, 0x99, 0x99);
-
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public long Hwnd { get; } = hwnd;
@@ -25,32 +16,46 @@ public sealed class CardViewModel(long hwnd) : INotifyPropertyChanged
     public string AgentBadge { get; private set => Set(ref field, value); } = "";
     public string StatusLine { get; private set => Set(ref field, value); } = "";
 
-    /// <summary>What the session is asking for; null unless Waiting.</summary>
-    public string? Detail { get; private set => Set(ref field, value); }
-
-    /// <summary>Card tooltip: the full title, plus the detail on a second line when there is one.</summary>
+    /// <summary>Card tooltip: the full title, for when it is cut off.</summary>
     public string ToolTip { get; private set => Set(ref field, value); } = "";
 
-    /// <summary>Status colour, used for the left border.</summary>
-    public Brush Brush { get; private set => Set(ref field, value); } = IdleBrush;
-    public Brush Background { get; private set => Set(ref field, value); } = CardBackground;
-    public Brush TitleBrush { get; private set => Set(ref field, value); } = TitleText;
+    /// <summary>The window's XAML colours the card from this (theme brushes are resolved there, not here).</summary>
+    public SessionStatus Status { get; private set => Set(ref field, value); } = SessionStatus.Idle;
+
+    /// <summary>True while the session is Waiting for the user; the card blinks.</summary>
+    public bool NeedsAttention { get; private set => Set(ref field, value); }
+
+    public string CpuText { get; private set => Set(ref field, value); } = "–";
+    public string MemoryText { get; private set => Set(ref field, value); } = "–";
+    public string IoText { get; private set => Set(ref field, value); } = "–";
+    public bool CpuHigh { get; private set => Set(ref field, value); }
+    public bool MemoryHigh { get; private set => Set(ref field, value); }
+    public bool IoHigh { get; private set => Set(ref field, value); }
+
+    /// <summary>Process count and the busiest processes, shown in the usage row's tooltip.</summary>
+    public string UsageToolTip { get; private set => Set(ref field, value); } = "";
+
+    public void SetUsage(ResourceUsage? usage)
+    {
+        if (usage is null) return;
+        CpuText = ResourceFormat.Percent(usage.CpuPercent);
+        MemoryText = ResourceFormat.Bytes(usage.MemoryBytes);
+        IoText = ResourceFormat.Rate(usage.IoBytesPerSec);
+        CpuHigh = usage.CpuHigh;
+        MemoryHigh = usage.MemoryHigh;
+        IoHigh = usage.IoHigh;
+        UsageToolTip = $"{usage.ProcessCount} processes" + string.Concat(usage.Top.Select(p =>
+            $"{Environment.NewLine}{p.Name}  {ResourceFormat.Percent(p.CpuPercent)}  {ResourceFormat.Bytes(p.MemoryBytes)}"));
+    }
 
     public void Update(Card card, string title, DateTimeOffset now)
     {
         Title = title;
         AgentBadge = Badge(card.Agent);
         StatusLine = FormatStatusLine(card, now);
-        Detail = card.Status == SessionStatus.Waiting && !string.IsNullOrWhiteSpace(card.Detail) ? card.Detail : null;
-        ToolTip = Detail is null ? title : title + Environment.NewLine + Detail;
-        Brush = card.Status switch
-        {
-            SessionStatus.Waiting => WaitingBrush,
-            SessionStatus.Working => WorkingBrush,
-            _ => IdleBrush,
-        };
-        Background = card.Status == SessionStatus.Waiting ? WaitingBackground : CardBackground;
-        TitleBrush = card.Status == SessionStatus.Idle ? IdleTitleText : TitleText;
+        ToolTip = title;
+        Status = card.Status;
+        NeedsAttention = card.Status == SessionStatus.Waiting;
     }
 
     public static string Badge(AgentKind agent) => agent == AgentKind.Claude ? "claude" : "codex";
@@ -69,13 +74,6 @@ public sealed class CardViewModel(long hwnd) : INotifyPropertyChanged
         if (string.IsNullOrWhiteSpace(cwd)) return null;
         var name = Path.GetFileName(cwd.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         return string.IsNullOrEmpty(name) ? cwd : name;
-    }
-
-    static SolidColorBrush Frozen(byte r, byte g, byte b)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
-        brush.Freeze();
-        return brush;
     }
 
     void Set<T>(ref T storage, T value, [CallerMemberName] string? name = null)

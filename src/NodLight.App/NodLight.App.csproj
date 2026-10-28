@@ -13,6 +13,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <AssemblyName>NodLight</AssemblyName>
+    <!-- Task Manager, Explorer and the taskbar jump list take the icon from the exe. Regenerate with tools/make-icon.ps1. -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <HookProject>$(MSBuildThisFileDirectory)..\NodLight.Hook\NodLight.Hook.csproj</HookProject>
     <HookPublishDir>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)hook-publish\$(Configuration)</HookPublishDir>
     <VsInstallerDir>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer</VsInstallerDir>
@@ -20,6 +22,11 @@
          self-contained mismatch check (NETSDK1151) does not apply. -->
     <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
   </PropertyGroup>
+
+  <!-- Icons of the taskbar menu entries: the jump list loads them by file path, so they sit next to the exe. -->
+  <ItemGroup>
+    <Content Include="icons\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <ItemGroup>
     <HookSource Include="..\NodLight.Hook\**\*.cs;..\NodLight.Hook\*.csproj;..\NodLight.Core\**\*.cs;..\NodLight.Core\*.csproj"
