@@ -17,6 +17,10 @@ Alt-Tabbing through all of them to find the one that needs me was the whole prob
 
 The idea comes from [ghossty-dock](https://github.com/andrewbakercloudscale/ghossty-dock), a patched Ghostty for macOS with a session sidebar. NodLight does the same job as a separate app that watches normal, unmodified Alacritty windows from outside.
 
+## The name
+
+A nod is the small signal a colleague gives you across the room: "your turn", "go ahead", "I'm done, over to you". It doesn't interrupt and it doesn't explain. It just lets you know someone is waiting. That is what each card does: when a session needs you, its light gives you a nod, and you know which window to go to.
+
 ## What you get
 
 - **One card per session.** Window title, a `claude` or `codex` badge, the status with how long it has been in it, and the project folder.
