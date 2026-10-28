@@ -54,7 +54,8 @@ jobs:
         shell: pwsh
         run: |
           $v = '${{ steps.v.outputs.version }}'
-          dotnet build installer -c Release -p:Version=$v -p:PublishDir=artifacts/publish --nologo
+          $publish = (Resolve-Path artifacts/publish).Path   # absolute: MSBuild would resolve a relative path against installer/
+          dotnet build installer -c Release -p:Version=$v -p:PublishDir=$publish --nologo
           Copy-Item installer/bin/Release/NodLight.msi "artifacts/NodLight-$v-win-x64.msi"
 
       - name: Checksums

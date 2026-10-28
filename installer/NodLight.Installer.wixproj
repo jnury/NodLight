@@ -5,7 +5,7 @@
     It packages a published folder, so publish first:
 
       dotnet publish src/NodLight.App -c Release -r win-x64 -p:SelfContained=true -o artifacts/publish
-      dotnet build installer -c Release -p:Version=1.2.3 -p:PublishDir=artifacts/publish
+      dotnet build installer -c Release -p:Version=1.2.3 -p:PublishDir=<absolute path of the publish folder>
   -->
   <PropertyGroup>
     <OutputName>NodLight</OutputName>
@@ -15,6 +15,11 @@
     <!-- Harvested file components in a per-user package have no HKCU key path; the profile folder makes that fine. -->
     <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
   </PropertyGroup>
+
+  <Target Name="CheckPublishDir" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(PublishDir)\NodLight.exe')"
+           Text="PublishDir '$(PublishDir)' has no NodLight.exe. Publish the app first and pass an absolute -p:PublishDir." />
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="WixToolset.Heat" Version="5.0.2" />
